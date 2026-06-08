@@ -16,6 +16,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 // ── SQLite ──────────────────────────────────────────────────
 // In production set DB_PATH env var to a persistent volume path, e.g. /data/videocall.db
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'videocall.db');
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }); // ensure /data (or any parent dir) exists
 const db = new Database(DB_PATH);
 db.exec(`
   CREATE TABLE IF NOT EXISTS sessions (
