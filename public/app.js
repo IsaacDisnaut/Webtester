@@ -377,8 +377,8 @@ function initSpeechRecognition() {
       showSystemMsg('Cannot access microphone — it may be blocked by another app.');
       disableSpeech();
     } else if (e.error === 'network') {
-      showSystemMsg('Speech network error — check connection. Will retry…');
-      // onend handles restart
+      // Very common on Android (transient Google service hiccup). onend fires
+      // right after this and handles the restart — no user action needed.
     }
     // no-speech / aborted — non-fatal, onend handles restart
   };
