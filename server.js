@@ -155,6 +155,8 @@ function attachSocketIO(server) {
 
     socket.on('signal',       ({ to, signal }) => io.to(to).emit('signal', { from: socket.id, signal }));
     socket.on('chat-message', ({ roomId, message }) => socket.to(roomId).emit('chat-message', { from: socket.id, message }));
+    // Relay peer-TTS state so both sides can sync auto-read
+    socket.on('peer-tts',    ({ roomId, enabled }) => socket.to(roomId).emit('peer-tts', { enabled }));
 
     socket.on('disconnect', () => {
       socket.rooms.forEach((room) => {

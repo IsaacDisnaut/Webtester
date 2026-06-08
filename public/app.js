@@ -1,5 +1,21 @@
 'use strict';
 
+// ── Mobile / platform detection ──────────────────
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS 13+
+const IS_MOBILE = IS_IOS || /Android/i.test(navigator.userAgent);
+
+// iOS blocks speechSynthesis.speak() unless it was triggered inside a user-gesture handler.
+// We unlock it on the first meaningful button tap by speaking a silent utterance.
+let ttsUnlocked = false;
+function unlockTTS() {
+  if (ttsUnlocked || !window.speechSynthesis) return;
+  ttsUnlocked = true;
+  const u = new SpeechSynthesisUtterance('');
+  u.volume = 0;
+  window.speechSynthesis.speak(u);
+}
+
 // ════════════════════════════════════════════════
 //  SESSION (login + usage tracking)
 // ════════════════════════════════════════════════
@@ -301,12 +317,21 @@ function initSpeechRecognition() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
     speechBtn.style.display = 'none';
+    if (IS_IOS) {
+      // Delay so it appears after the welcome message
+      setTimeout(() => showSystemMsg(
+        'Speech recognition is not available on iOS Safari. Please type your messages.'
+      ), 1200);
+    }
     return;
   }
+
   recognition = new SR();
-  recognition.continuous = true;
+  // continuous=true is unreliable on Android — it stops silently after a few seconds.
+  // Using continuous=false + manual restart via onend is far more stable on mobile.
+  recognition.continuous    = !IS_MOBILE;
   recognition.interimResults = true;
-  recognition.lang = 'en-US'; // updated to th-TH when person mode is active
+  recognition.lang = 'en-US'; // updated to th-TH in person mode
 
   recognition.onresult = (e) => {
     let interim = '';
@@ -350,12 +375,16 @@ function initSpeechRecognition() {
       showSystemMsg('Microphone access denied for speech recognition.');
       disableSpeech();
     }
+    // network / no-speech: let onend handle restart — do not call disableSpeech
   };
 
-  // Auto-restart when browser ends the session (keeps listening continuously)
+  // Auto-restart to keep listening. On mobile add a short delay to prevent
+  // rapid restart loops when the browser kills continuous sessions early.
   recognition.onend = () => {
     if (state.speechOn) {
-      try { recognition.start(); } catch {}
+      setTimeout(() => {
+        try { recognition.start(); } catch {}
+      }, IS_MOBILE ? 350 : 0);
     }
   };
 }
@@ -426,9 +455,10 @@ function speakPeerMessage(text) {
   window.speechSynthesis.speak(utt);
 }
 
-// On-demand speaker button on each message bubble
+// On-demand speaker button on each message bubble (this IS a user gesture → unlocks TTS on iOS)
 function speakOnDemand(text) {
   if (!window.speechSynthesis) return;
+  unlockTTS(); // satisfy iOS gesture requirement
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
   const thai = getThaiVoice();
@@ -438,13 +468,19 @@ function speakOnDemand(text) {
 }
 
 function togglePeerTTS() {
+  unlockTTS(); // clicking the toggle IS a user gesture — unlock iOS audio here
   peerTTSOn = !peerTTSOn;
   const btn = $('peer-tts-btn');
   btn.classList.toggle('active-speech', peerTTSOn);
-  btn.title = peerTTSOn ? 'Peer TTS ON — click to turn off' : 'Read peer messages aloud';
+  btn.title = peerTTSOn ? 'Auto-read ON — click to turn off' : 'Auto-read peer messages aloud';
   showSystemMsg(peerTTSOn
-    ? 'Peer TTS ON — incoming messages will be spoken aloud.'
-    : 'Peer TTS OFF.');
+    ? 'Auto-read ON — peer messages will be spoken aloud.'
+    : 'Auto-read OFF.');
+  // Sync state to peers: when you enable auto-read, your peer's side enables it too
+  // so both participants hear each other without each needing to press the button.
+  if (currentRoomId && socket) {
+    socket.emit('peer-tts', { roomId: currentRoomId, enabled: peerTTSOn });
+  }
 }
 
 // ════════════════════════════════════════════════
@@ -517,6 +553,25 @@ function showSystemMsg(text) {
   const el = document.createElement('div');
   el.className = 'system-msg';
   el.textContent = text;
+  chatMessages.appendChild(el);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Mobile browsers (especially iOS) block TTS until a user gesture occurs.
+// This shows a tappable banner that unlocks the audio context on tap.
+function showTapToUnlockAudio() {
+  if (ttsUnlocked) return;
+  // Remove any existing banner
+  document.querySelectorAll('.tap-unlock-btn').forEach(e => e.remove());
+  const el = document.createElement('button');
+  el.className = 'tap-unlock-btn';
+  el.textContent = 'Tap to enable audio for auto-read';
+  el.addEventListener('click', () => {
+    unlockTTS();
+    el.textContent = 'Audio enabled';
+    el.disabled = true;
+    setTimeout(() => el.remove(), 1500);
+  }, { once: true });
   chatMessages.appendChild(el);
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -631,6 +686,22 @@ function initSocket() {
   socket.on('chat-message', ({ from, message }) => {
     appendMessage('Peer', message, 'peer');
     speakPeerMessage(message);
+  });
+
+  // Peer toggled auto-read on their end — mirror the state here so both sides
+  // auto-read without each user having to press the button individually.
+  socket.on('peer-tts', ({ enabled }) => {
+    if (peerTTSOn === enabled) return;
+    peerTTSOn = enabled;
+    const btn = $('peer-tts-btn');
+    btn.classList.toggle('active-speech', peerTTSOn);
+    btn.title = peerTTSOn ? 'Auto-read ON — click to turn off' : 'Auto-read peer messages aloud';
+    showSystemMsg(peerTTSOn
+      ? 'Auto-read enabled by peer — messages will be spoken aloud.'
+      : 'Peer disabled auto-read.');
+    // On mobile, TTS is still gated behind a user gesture. Show a tap prompt
+    // so the user can unlock audio before the first message arrives.
+    if (enabled && IS_MOBILE && !ttsUnlocked) showTapToUnlockAudio();
   });
 
   socket.on('connect_error', (e) => {
