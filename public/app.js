@@ -279,13 +279,18 @@ function applyMode(mode) {
     aiAvatar.style.display = 'flex';
     remoteVideo.classList.remove('active');
     remoteName.textContent = 'AI Assistant';
+    if (recognition) recognition.lang = 'en-US';
   } else {
     roomBar.style.display = 'block';
     if (!currentRoomId) generateRoomCode();
-    else {
-      // Re-join existing room if mode switched back
-      aiAvatar.style.display = 'none';
-    }
+    else aiAvatar.style.display = 'none';
+    // Thai is priority language for person mode
+    if (recognition) recognition.lang = 'th-TH';
+  }
+
+  // Restart recognition with the new language if it's active
+  if (state.speechOn && recognition) {
+    try { recognition.stop(); } catch {}
   }
 }
 
@@ -301,6 +306,7 @@ function initSpeechRecognition() {
   recognition = new SR();
   recognition.continuous = true;
   recognition.interimResults = true;
+  recognition.lang = 'en-US'; // updated to th-TH when person mode is active
 
   recognition.onresult = (e) => {
     let interim = '';
@@ -322,9 +328,20 @@ function initSpeechRecognition() {
 
     if (finalChunk) {
       if (interimMsgEl) { interimMsgEl.remove(); interimMsgEl = null; }
-      const sep = chatInput.value.trim() ? ' ' : '';
-      chatInput.value = chatInput.value.trim() + sep + finalChunk.trim();
-      autoResizeInput();
+
+      if (state.mode === 'person') {
+        // Auto-send immediately in person mode (no manual Enter needed)
+        const trimmed = finalChunk.trim();
+        if (trimmed) {
+          appendMessage(currentUserName, trimmed, 'you');
+          sendToPeer(trimmed);
+        }
+      } else {
+        // AI mode: put in input box so user can review before sending
+        const sep = chatInput.value.trim() ? ' ' : '';
+        chatInput.value = chatInput.value.trim() + sep + finalChunk.trim();
+        autoResizeInput();
+      }
     }
   };
 
@@ -335,7 +352,7 @@ function initSpeechRecognition() {
     }
   };
 
-  // Auto-restart when browser ends the session
+  // Auto-restart when browser ends the session (keeps listening continuously)
   recognition.onend = () => {
     if (state.speechOn) {
       try { recognition.start(); } catch {}
@@ -345,11 +362,16 @@ function initSpeechRecognition() {
 
 function enableSpeech() {
   if (!recognition) return;
+  // Set language based on current mode
+  recognition.lang = state.mode === 'person' ? 'th-TH' : 'en-US';
   state.speechOn = true;
   try { recognition.start(); } catch {}
   speechBtn.classList.add('active-speech');
   speechIndicator.style.display = 'flex';
-  showSystemMsg('Speech recognition ON — speak now, then press Enter to send.');
+  const hint = state.mode === 'person'
+    ? 'Speech ON (ภาษาไทย) — พูดได้เลย ส่งอัตโนมัติ'
+    : 'Speech ON — speak now, then press Enter to send.';
+  showSystemMsg(hint);
 }
 
 function disableSpeech() {
@@ -384,6 +406,48 @@ function stopSpeaking() {
 }
 
 // ════════════════════════════════════════════════
+//  PEER TTS  (reads incoming peer messages aloud)
+// ════════════════════════════════════════════════
+let peerTTSOn = false;
+
+// Pick a Thai voice if available, else use the system default
+function getThaiVoice() {
+  const voices = window.speechSynthesis?.getVoices() || [];
+  return voices.find(v => v.lang.startsWith('th')) || null;
+}
+
+function speakPeerMessage(text) {
+  if (!peerTTSOn || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  const thai = getThaiVoice();
+  if (thai) utt.voice = thai;
+  utt.rate = 1.0;
+  window.speechSynthesis.speak(utt);
+}
+
+// On-demand speaker button on each message bubble
+function speakOnDemand(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  const thai = getThaiVoice();
+  if (thai) utt.voice = thai;
+  utt.rate = 1.0;
+  window.speechSynthesis.speak(utt);
+}
+
+function togglePeerTTS() {
+  peerTTSOn = !peerTTSOn;
+  const btn = $('peer-tts-btn');
+  btn.classList.toggle('active-speech', peerTTSOn);
+  btn.title = peerTTSOn ? 'Peer TTS ON — click to turn off' : 'Read peer messages aloud';
+  showSystemMsg(peerTTSOn
+    ? 'Peer TTS ON — incoming messages will be spoken aloud.'
+    : 'Peer TTS OFF.');
+}
+
+// ════════════════════════════════════════════════
 //  CHAT UI
 // ════════════════════════════════════════════════
 function clearWelcome() {
@@ -408,10 +472,28 @@ function appendMessage(sender, text, side, interim = false) {
   wrap.appendChild(bubble);
 
   if (!interim) {
-    const t = document.createElement('div');
+    const footer = document.createElement('div');
+    footer.className = 'msg-footer';
+
+    const t = document.createElement('span');
     t.className = 'msg-time';
     t.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    wrap.appendChild(t);
+    footer.appendChild(t);
+
+    // Speaker button on every peer message (for deaf↔blind accessibility)
+    if (side === 'peer') {
+      const speakBtn = document.createElement('button');
+      speakBtn.className = 'msg-speak-btn';
+      speakBtn.title = 'Read aloud / อ่านออกเสียง';
+      speakBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+      </svg>`;
+      speakBtn.addEventListener('click', () => speakOnDemand(text));
+      footer.appendChild(speakBtn);
+    }
+
+    wrap.appendChild(footer);
   }
 
   chatMessages.appendChild(wrap);
@@ -548,6 +630,7 @@ function initSocket() {
 
   socket.on('chat-message', ({ from, message }) => {
     appendMessage('Peer', message, 'peer');
+    speakPeerMessage(message);
   });
 
   socket.on('connect_error', (e) => {
@@ -604,7 +687,7 @@ function createPeerConnection(peerId) {
 function setupDataChannel(peerId, dc) {
   peers[peerId].dc = dc;
   dc.onopen = () => console.log('Data channel open with', peerId);
-  dc.onmessage = (e) => appendMessage('Peer', e.data, 'peer');
+  dc.onmessage = (e) => { appendMessage('Peer', e.data, 'peer'); speakPeerMessage(e.data); };
   dc.onerror = (e) => console.warn('DC error:', e);
 }
 
@@ -750,6 +833,7 @@ function bindEventListeners() {
   videoBtn.addEventListener('click', toggleCam);
   speechBtn.addEventListener('click', toggleSpeech);
   endBtn.addEventListener('click', endCall);
+  $('peer-tts-btn').addEventListener('click', togglePeerTTS);
 
   sendBtn.addEventListener('click', sendMessage);
   chatInput.addEventListener('keydown', (e) => {

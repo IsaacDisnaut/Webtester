@@ -620,11 +620,51 @@ body {
 }
 .msg.interim .msg-bubble { opacity: .6; font-style: italic; }
 
+.msg-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  padding: 0 4px;
+}
+.msg.you .msg-footer { justify-content: flex-end; }
+
 .msg-time {
   font-size: .68rem;
   color: var(--text-muted);
-  margin-top: 3px;
-  padding: 0 4px;
+}
+
+.msg-speak-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all .15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.msg-speak-btn:hover {
+  background: rgba(108,99,255,.15);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* Peer TTS toggle in chat header */
+.peer-tts-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.peer-tts-btn.active-speech {
+  background: rgba(108,99,255,.2);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 0 10px rgba(108,99,255,.3);
 }
 
 /* Typing indicator */
