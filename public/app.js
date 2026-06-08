@@ -327,10 +327,9 @@ function initSpeechRecognition() {
   }
 
   recognition = new SR();
-  // continuous=true is unreliable on Android — it stops silently after a few seconds.
-  // Using continuous=false + manual restart via onend is far more stable on mobile.
-  recognition.continuous    = !IS_MOBILE;
+  recognition.continuous     = true;  // keep continuous on all platforms; onend handles mobile restarts
   recognition.interimResults = true;
+  recognition.maxAlternatives = 1;
   recognition.lang = 'en-US'; // updated to th-TH in person mode
 
   recognition.onresult = (e) => {
@@ -372,10 +371,16 @@ function initSpeechRecognition() {
 
   recognition.onerror = (e) => {
     if (['not-allowed', 'service-not-allowed'].includes(e.error)) {
-      showSystemMsg('Microphone access denied for speech recognition.');
+      showSystemMsg('Microphone access denied. Allow microphone in browser settings.');
       disableSpeech();
+    } else if (e.error === 'audio-capture') {
+      showSystemMsg('Cannot access microphone — it may be blocked by another app.');
+      disableSpeech();
+    } else if (e.error === 'network') {
+      showSystemMsg('Speech network error — check connection. Will retry…');
+      // onend handles restart
     }
-    // network / no-speech: let onend handle restart — do not call disableSpeech
+    // no-speech / aborted — non-fatal, onend handles restart
   };
 
   // Auto-restart to keep listening. On mobile add a short delay to prevent
@@ -435,9 +440,15 @@ function stopSpeaking() {
 }
 
 // ════════════════════════════════════════════════
-//  PEER TTS  (reads incoming peer messages aloud)
+//  PEER TTS
+//  Two independent flags — they do not mirror each other:
+//  myTTSEnabled   = I want MY messages spoken aloud on my peer's device.
+//                   Toggled by the button; emits a signal to the peer.
+//  peerTTSEnabled = My peer requested that THEIR messages be spoken on MY device.
+//                   Set only when the peer sends a 'peer-tts' socket event.
 // ════════════════════════════════════════════════
-let peerTTSOn = false;
+let myTTSEnabled   = false;
+let peerTTSEnabled = false;
 
 // Pick a Thai voice if available, else use the system default
 function getThaiVoice() {
@@ -445,8 +456,10 @@ function getThaiVoice() {
   return voices.find(v => v.lang.startsWith('th')) || null;
 }
 
+// Called when an incoming peer message arrives — speak it if the peer has
+// enabled voicing for their messages (peerTTSEnabled), not our own toggle.
 function speakPeerMessage(text) {
-  if (!peerTTSOn || !window.speechSynthesis) return;
+  if (!peerTTSEnabled || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
   const thai = getThaiVoice();
@@ -458,7 +471,7 @@ function speakPeerMessage(text) {
 // On-demand speaker button on each message bubble (this IS a user gesture → unlocks TTS on iOS)
 function speakOnDemand(text) {
   if (!window.speechSynthesis) return;
-  unlockTTS(); // satisfy iOS gesture requirement
+  unlockTTS();
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
   const thai = getThaiVoice();
@@ -468,18 +481,19 @@ function speakOnDemand(text) {
 }
 
 function togglePeerTTS() {
-  unlockTTS(); // clicking the toggle IS a user gesture — unlock iOS audio here
-  peerTTSOn = !peerTTSOn;
+  unlockTTS(); // button click = user gesture, satisfies iOS audio unlock
+  myTTSEnabled = !myTTSEnabled;
   const btn = $('peer-tts-btn');
-  btn.classList.toggle('active-speech', peerTTSOn);
-  btn.title = peerTTSOn ? 'Auto-read ON — click to turn off' : 'Auto-read peer messages aloud';
-  showSystemMsg(peerTTSOn
-    ? 'Auto-read ON — peer messages will be spoken aloud.'
-    : 'Auto-read OFF.');
-  // Sync state to peers: when you enable auto-read, your peer's side enables it too
-  // so both participants hear each other without each needing to press the button.
+  btn.classList.toggle('active-speech', myTTSEnabled);
+  btn.title = myTTSEnabled
+    ? 'Voicing my messages ON — peer will hear what I type'
+    : 'Voice my messages to peer';
+  showSystemMsg(myTTSEnabled
+    ? 'Your messages will be read aloud to your peer.'
+    : 'Stopped voicing your messages to peer.');
+  // Tell the peer to start/stop reading our messages
   if (currentRoomId && socket) {
-    socket.emit('peer-tts', { roomId: currentRoomId, enabled: peerTTSOn });
+    socket.emit('peer-tts', { roomId: currentRoomId, enabled: myTTSEnabled });
   }
 }
 
@@ -679,6 +693,7 @@ function initSocket() {
 
   socket.on('peer-left', (peerId) => {
     cleanupPeer(peerId);
+    peerTTSEnabled = false; // reset when peer leaves; new peer starts fresh
     setRoomStatus('Peer disconnected — waiting…', false);
     showSystemMsg('Peer left the room.');
   });
@@ -688,19 +703,15 @@ function initSocket() {
     speakPeerMessage(message);
   });
 
-  // Peer toggled auto-read on their end — mirror the state here so both sides
-  // auto-read without each user having to press the button individually.
+  // Peer requested that their messages be spoken on our device (or cancelled that request).
+  // This sets peerTTSEnabled — it does NOT change our own toggle (myTTSEnabled).
   socket.on('peer-tts', ({ enabled }) => {
-    if (peerTTSOn === enabled) return;
-    peerTTSOn = enabled;
-    const btn = $('peer-tts-btn');
-    btn.classList.toggle('active-speech', peerTTSOn);
-    btn.title = peerTTSOn ? 'Auto-read ON — click to turn off' : 'Auto-read peer messages aloud';
-    showSystemMsg(peerTTSOn
-      ? 'Auto-read enabled by peer — messages will be spoken aloud.'
-      : 'Peer disabled auto-read.');
-    // On mobile, TTS is still gated behind a user gesture. Show a tap prompt
-    // so the user can unlock audio before the first message arrives.
+    peerTTSEnabled = enabled;
+    showSystemMsg(enabled
+      ? "Peer enabled voice for their messages — they'll be read aloud here."
+      : 'Peer stopped voicing their messages.');
+    // On mobile, speechSynthesis is blocked until a user gesture. Prompt the user
+    // to tap so audio works before the first message arrives.
     if (enabled && IS_MOBILE && !ttsUnlocked) showTapToUnlockAudio();
   });
 
