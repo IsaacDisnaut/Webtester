@@ -259,7 +259,13 @@ async function startLocalMedia() {
   } catch (e) {
     console.warn('Media error:', e);
     camPlaceholder.classList.add('visible');
-    showSystemMsg('Camera/mic not available — chat still works.');
+    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+      showSystemMsg('Camera/mic permission denied — tap the lock icon in your browser address bar and allow access, then reload.');
+    } else if (e.name === 'NotFoundError') {
+      showSystemMsg('No camera/mic found — chat still works.');
+    } else {
+      showSystemMsg('Camera/mic not available — chat still works.');
+    }
   }
 }
 
@@ -327,12 +333,18 @@ function initSpeechRecognition() {
   }
 
   recognition = new SR();
-  recognition.continuous     = true;  // keep continuous on all platforms; onend handles mobile restarts
-  recognition.interimResults = true;
+  recognition.continuous      = true;
+  recognition.interimResults  = true;
   recognition.maxAlternatives = 1;
   recognition.lang = 'en-US'; // updated to th-TH in person mode
 
+  // Exponential backoff for restarts: backs off after each session-end with no
+  // result, resets to base on success. Prevents rapid-loop on persistent errors.
+  let restartDelay = IS_MOBILE ? 600 : 0;
+
   recognition.onresult = (e) => {
+    restartDelay = IS_MOBILE ? 600 : 0; // reset backoff on any successful result
+
     let interim = '';
     let finalChunk = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -354,14 +366,12 @@ function initSpeechRecognition() {
       if (interimMsgEl) { interimMsgEl.remove(); interimMsgEl = null; }
 
       if (state.mode === 'person') {
-        // Auto-send immediately in person mode (no manual Enter needed)
         const trimmed = finalChunk.trim();
         if (trimmed) {
           appendMessage(currentUserName, trimmed, 'you');
           sendToPeer(trimmed);
         }
       } else {
-        // AI mode: put in input box so user can review before sending
         const sep = chatInput.value.trim() ? ' ' : '';
         chatInput.value = chatInput.value.trim() + sep + finalChunk.trim();
         autoResizeInput();
@@ -374,31 +384,33 @@ function initSpeechRecognition() {
       showSystemMsg('Microphone access denied. Allow microphone in browser settings.');
       disableSpeech();
     } else if (e.error === 'audio-capture') {
-      showSystemMsg('Cannot access microphone — it may be blocked by another app.');
+      showSystemMsg('Cannot access microphone — it may be in use by another app.');
       disableSpeech();
-    } else if (e.error === 'network') {
-      // Very common on Android (transient Google service hiccup). onend fires
-      // right after this and handles the restart — no user action needed.
     }
-    // no-speech / aborted — non-fatal, onend handles restart
+    // network / no-speech / aborted — transient, onend handles restart
   };
 
-  // Auto-restart to keep listening. On mobile add a short delay to prevent
-  // rapid restart loops when the browser kills continuous sessions early.
   recognition.onend = () => {
-    if (state.speechOn) {
-      setTimeout(() => {
-        try { recognition.start(); } catch {}
-      }, IS_MOBILE ? 350 : 0);
-    }
+    if (!state.speechOn) return;
+    setTimeout(() => {
+      if (!state.speechOn) return;
+      try { recognition.start(); } catch {}
+    }, restartDelay);
+    // Increase delay after each failed session; cap at 4 s
+    restartDelay = Math.min(restartDelay * 1.5, 4000);
   };
 }
 
 function enableSpeech() {
   if (!recognition) return;
-  // Set language based on current mode
   recognition.lang = state.mode === 'person' ? 'th-TH' : 'en-US';
   state.speechOn = true;
+  // On mobile the Web Speech API and getUserMedia sometimes compete for the
+  // microphone. Pause the local audio track while STT is active so speech
+  // recognition gets exclusive mic access.
+  if (IS_MOBILE && state.localStream) {
+    state.localStream.getAudioTracks().forEach(t => (t.enabled = false));
+  }
   try { recognition.start(); } catch {}
   speechBtn.classList.add('active-speech');
   speechIndicator.style.display = 'flex';
@@ -414,6 +426,10 @@ function disableSpeech() {
   if (interimMsgEl) { interimMsgEl.remove(); interimMsgEl = null; }
   speechBtn.classList.remove('active-speech');
   speechIndicator.style.display = 'none';
+  // Restore mic track when STT is off (respects the mute button state)
+  if (IS_MOBILE && state.localStream && state.micOn) {
+    state.localStream.getAudioTracks().forEach(t => (t.enabled = true));
+  }
 }
 
 function toggleSpeech() {
@@ -796,14 +812,14 @@ function cleanupPeer(peerId) {
   }
 }
 
-// Send via data channel (prefer) or socket relay (fallback)
+// Send via data channel (prefer) or socket relay (fallback, not both)
 function sendToPeer(text) {
   let dcSent = false;
   Object.values(peers).forEach(({ dc }) => {
     if (dc && dc.readyState === 'open') { dc.send(text); dcSent = true; }
   });
-  // Socket relay as fallback (server echoes to room)
-  if (currentRoomId) {
+  // Only fall back to socket relay when no data channel is open
+  if (!dcSent && currentRoomId) {
     socket.emit('chat-message', { roomId: currentRoomId, message: text });
   }
 }
