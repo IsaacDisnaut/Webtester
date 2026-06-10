@@ -8,7 +8,7 @@
 
   // Material palette keyed on link-name substrings
   var MAT = {
-    eye:    { color: 0x080808, specular: 0x1a1a1a, shininess: 80  },
+    eye:    { color: 0xf0f0ff, specular: 0xaaaacc, shininess: 90  },
     neck:   { color: 0xd0dce8, specular: 0x445566, shininess: 35  },
     jaw:    { color: 0xddeeff, specular: 0x334466, shininess: 30  },
     rothead:{ color: 0xe8eef4, specular: 0x445566, shininess: 28  },
