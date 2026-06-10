@@ -354,15 +354,16 @@ let dpadInterval        = null;
 function updateRobotModel() {
   const rv = window.robotViewer;
   if (!rv) return;
-  // D-pad left/right → head pan (degrees → radians)
-  rv.setJoint('head_pan_joint',  robotState.headAngle * Math.PI / 180);
-  // D-pad up/down → jaw open (0..1 → 0..0.436 rad ≈ 25°)
-  rv.setJoint('jaw_joint',       robotState.mouthOpen * 0.436);
-  // Analog X → both eye pan joints (mimic)
-  rv.setJoint('eyes_pan_joint',  robotState.analogX * 0.349);
-  rv.setJoint('l_eye_pan_joint', robotState.analogX * 0.349);
-  // Analog Y → eye tilt (positive joystick-down → eyes tilt down → positive angle)
-  rv.setJoint('eyes_tilt_joint', robotState.analogY * 0.349);
+  // D-pad left/right → head rotation (degrees → radians, limit ±0.524)
+  rv.setJoint('i01.head.rothead_link_joint', robotState.headAngle * Math.PI / 180);
+  // D-pad up/down → jaw open (0..1 → 0..0.175 rad ≈ 10°)
+  rv.setJoint('i01.head.jaw_link_joint', robotState.mouthOpen * 0.17453);
+  // Analog X → eye pan (both eyes, limit ±0.349 rad)
+  rv.setJoint('i01.head.eyeLeft.001_link_joint',  robotState.analogX * 0.349);
+  rv.setJoint('i01.head.eyeRight.001_link_joint', robotState.analogX * 0.349);
+  // Analog Y → eye tilt (limit ±0.349 rad, negative so push-up = look up)
+  rv.setJoint('i01.head.eyeLeft_link_joint',  -robotState.analogY * 0.349);
+  rv.setJoint('i01.head.eyeRight_link_joint', -robotState.analogY * 0.349);
 }
 
 // Keep old name as alias so any remaining callers don't break

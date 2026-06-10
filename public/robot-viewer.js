@@ -1,24 +1,28 @@
 'use strict';
-// Three.js-based URDF viewer for the InMoov head.
-// Requires three.min.js, STLLoader.js, and OrbitControls.js to be loaded first.
+// Three.js URDF viewer for the InMoov head (inmoov_urdf-master archive).
+// Requires three.min.js + STLLoader.js + OrbitControls.js loaded first.
 (function () {
-  var COLORS = {
-    frame:  { color: 0xb8c8d8, specular: 0x445566, shininess: 40  },
-    cover:  { color: 0xddeef8, specular: 0x334455, shininess: 30  },
-    eye:    { color: 0xf8f8ff, specular: 0xaaaacc, shininess: 90  },
-    iris:   { color: 0x2244bb, specular: 0x6688ff, shininess: 130 },
-    camera: { color: 0x111118, specular: 0x222233, shininess: 60  },
+
+  // Blender-unit → metres scale factor (from properties.xacro model_scale)
+  var MODEL_SCALE = 0.1196;
+
+  // Material palette keyed on link-name substrings
+  var MAT = {
+    eye:    { color: 0xf0f0ff, specular: 0xaaaacc, shininess: 90  },
+    neck:   { color: 0xd0dce8, specular: 0x445566, shininess: 35  },
+    jaw:    { color: 0xddeeff, specular: 0x334466, shininess: 30  },
+    rothead:{ color: 0xe8eef4, specular: 0x445566, shininess: 28  },
+    default:{ color: 0xdde8f0, specular: 0x334455, shininess: 30  },
   };
 
   function materialFor(linkName) {
     var T = window.THREE;
     var c;
-    if (linkName.indexOf('iris')   !== -1) c = COLORS.iris;
-    else if (linkName.indexOf('camera') !== -1) c = COLORS.camera;
-    else if (linkName.indexOf('eye')    !== -1 && linkName.indexOf('support') === -1) c = COLORS.eye;
-    else if (linkName === 'jaw_link' || linkName === 'skull_link' ||
-             linkName === 'face_link' || linkName.indexOf('ear') !== -1) c = COLORS.cover;
-    else c = COLORS.frame;
+    if (linkName.indexOf('eye') !== -1 && linkName.indexOf('.001') === -1) c = MAT.eye;
+    else if (linkName === 'neck_link')                     c = MAT.neck;
+    else if (linkName.indexOf('jaw')     !== -1)           c = MAT.jaw;
+    else if (linkName.indexOf('rothead') !== -1)           c = MAT.rothead;
+    else c = MAT.default;
     return new T.MeshPhongMaterial({ color: c.color, specular: c.specular, shininess: c.shininess });
   }
 
@@ -28,17 +32,17 @@
 
   function loadSTL(url, material) {
     return new Promise(function (resolve) {
-      var loader = new window.THREE.STLLoader();
-      loader.load(url, function (geo) {
+      new window.THREE.STLLoader().load(url, function (geo) {
         geo.computeVertexNormals();
         resolve(new window.THREE.Mesh(geo, material));
       }, undefined, function (err) {
-        console.warn('[RobotViewer] STL load failed:', url, err);
+        console.warn('[RobotViewer] 404:', url);
         resolve(null);
       });
     });
   }
 
+  // ── Constructor ────────────────────────────────────
   function RobotViewer(canvas) {
     this._canvas   = canvas;
     this._renderer = null;
@@ -49,6 +53,7 @@
     this._raf      = null;
   }
 
+  // ── init ───────────────────────────────────────────
   RobotViewer.prototype.init = function () {
     var self   = this;
     var THREE  = window.THREE;
@@ -62,10 +67,9 @@
     var scene = new THREE.Scene();
     this._scene = scene;
 
-    var camera = new THREE.PerspectiveCamera(38, 1, 0.001, 5);
+    var camera = new THREE.PerspectiveCamera(38, 1, 0.001, 10);
     this._camera = camera;
 
-    // Ambient + two directional lights for good depth cues
     scene.add(new THREE.AmbientLight(0xffffff, 0.65));
     var d1 = new THREE.DirectionalLight(0xffffff, 0.85);
     d1.position.set(2, 3, 4);
@@ -75,39 +79,35 @@
     scene.add(d2);
 
     var controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping  = true;
-    controls.dampingFactor  = 0.1;
-    controls.minDistance    = 0.05;
-    controls.maxDistance    = 1.2;
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.1;
+    controls.minDistance   = 0.05;
+    controls.maxDistance   = 2.0;
     this._controls = controls;
 
-    // Resize handling
     function resize() {
       var parent = canvas.parentElement;
       if (!parent) return;
-      var w = parent.clientWidth;
-      var h = parent.clientHeight;
+      var w = parent.clientWidth, h = parent.clientHeight;
       if (w < 1 || h < 1) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     }
-    this._resize = resize;
     resize();
-    var ro = new ResizeObserver(resize);
-    ro.observe(canvas.parentElement);
+    new ResizeObserver(resize).observe(canvas.parentElement);
 
     return this._loadURDF('/robot/head.urdf').then(function () {
-      // Position camera: InMoov head faces +X in URDF / Three.js space after root rotation.
-      // Camera at +X side so we look at the face head-on.
-      camera.position.set(0.42, 0.08, 0.05);
-      controls.target.set(0.04, 0.06, 0);
+      // Camera looks at head centre from the front (+X direction)
+      camera.position.set(0.45, 0.05, 0.05);
+      controls.target.set(0, 0.04, 0);
       controls.update();
       self._loop();
       return self;
     });
   };
 
+  // ── URDF loader ────────────────────────────────────
   RobotViewer.prototype._loadURDF = function (url) {
     var self  = this;
     var THREE = window.THREE;
@@ -116,12 +116,11 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.text();
     }).then(function (text) {
-      var doc    = new DOMParser().parseFromString(text, 'text/xml');
-      var links  = {};
-      var joints = {};
-
-      // 1. Build link groups + queue STL loads
+      var doc   = new DOMParser().parseFromString(text, 'text/xml');
+      var links = {};
       var loads = [];
+
+      // ── 1. Create a Group per link; queue one STL load per <visual> ──
       var linkEls = doc.querySelectorAll('link');
       for (var i = 0; i < linkEls.length; i++) {
         (function (linkEl) {
@@ -130,101 +129,106 @@
           group.name = 'link:' + name;
           links[name] = group;
 
-          var meshEl = linkEl.querySelector('visual geometry mesh');
-          if (!meshEl) return;
+          var visuals = linkEl.querySelectorAll('visual');
+          for (var v = 0; v < visuals.length; v++) {
+            (function (visual) {
+              var meshEl = visual.querySelector('geometry mesh');
+              if (!meshEl) return;
 
-          var filename = meshEl.getAttribute('filename');
-          var scaleArr = parseVec3(meshEl.getAttribute('scale') || '1 1 1');
-          var mat      = materialFor(name);
+              var filename = meshEl.getAttribute('filename');
+              var scaleArr = parseVec3(meshEl.getAttribute('scale') || '1 1 1');
+              var mat      = materialFor(name);
+              var originEl = visual.querySelector('origin');
+              var xyz      = parseVec3(originEl ? originEl.getAttribute('xyz') : null);
+              var rpy      = parseVec3(originEl ? originEl.getAttribute('rpy') : null);
 
-          loads.push(loadSTL(filename, mat).then(function (mesh) {
-            if (!mesh) return;
-            mesh.scale.set(scaleArr[0], scaleArr[1], scaleArr[2]);
-            var originEl = linkEl.querySelector('visual origin');
-            if (originEl) {
-              var xyz = parseVec3(originEl.getAttribute('xyz'));
-              var rpy = parseVec3(originEl.getAttribute('rpy'));
-              mesh.position.set(xyz[0], xyz[1], xyz[2]);
-              mesh.rotation.set(rpy[0], rpy[1], rpy[2]);
-            }
-            group.add(mesh);
-          }));
+              loads.push(loadSTL(filename, mat).then(function (mesh) {
+                if (!mesh) return;
+                mesh.scale.set(scaleArr[0], scaleArr[1], scaleArr[2]);
+                mesh.position.set(xyz[0], xyz[1], xyz[2]);
+                mesh.rotation.set(rpy[0], rpy[1], rpy[2]);
+                group.add(mesh);
+              }));
+            })(visuals[v]);
+          }
         })(linkEls[i]);
       }
 
       return Promise.all(loads).then(function () {
-        // 2. Wire up joint hierarchy
-        var childLinks = {};
-        var jointEls   = doc.querySelectorAll('joint');
+        var joints    = {};
+        var childSet  = {};
+        var jointEls  = doc.querySelectorAll('joint');
 
+        // ── 2. Wire joint hierarchy ──
         for (var j = 0; j < jointEls.length; j++) {
-          var jointEl    = jointEls[j];
-          var jname      = jointEl.getAttribute('name');
-          var jtype      = jointEl.getAttribute('type');
-          var parentName = jointEl.querySelector('parent').getAttribute('link');
-          var childName  = jointEl.querySelector('child').getAttribute('link');
+          var jEl        = jointEls[j];
+          var jname      = jEl.getAttribute('name');
+          var jtype      = jEl.getAttribute('type');
+          var parentName = jEl.querySelector('parent').getAttribute('link');
+          var childName  = jEl.querySelector('child').getAttribute('link');
 
-          var originEl   = jointEl.querySelector('origin');
-          var xyz        = parseVec3(originEl ? originEl.getAttribute('xyz') : null);
-          var rpy        = parseVec3(originEl ? originEl.getAttribute('rpy') : null);
+          var orig   = jEl.querySelector('origin');
+          var jxyz   = parseVec3(orig ? orig.getAttribute('xyz') : null);
+          var jrpy   = parseVec3(orig ? orig.getAttribute('rpy') : null);
 
-          var axisEl     = jointEl.querySelector('axis');
-          var axisArr    = parseVec3(axisEl ? axisEl.getAttribute('xyz') : '0 0 1');
-          var axisVec    = new THREE.Vector3(axisArr[0], axisArr[1], axisArr[2]).normalize();
+          var axEl   = jEl.querySelector('axis');
+          var axArr  = parseVec3(axEl ? axEl.getAttribute('xyz') : '0 0 1');
+          var axVec  = new THREE.Vector3(axArr[0], axArr[1], axArr[2]).normalize();
 
-          var limitEl    = jointEl.querySelector('limit');
-          var lower      = limitEl ? parseFloat(limitEl.getAttribute('lower') || '-3.14') : -3.14;
-          var upper      = limitEl ? parseFloat(limitEl.getAttribute('upper') ||  '3.14') :  3.14;
+          var limEl  = jEl.querySelector('limit');
+          var lower  = limEl ? parseFloat(limEl.getAttribute('lower') || '-3.14') : -3.14;
+          var upper  = limEl ? parseFloat(limEl.getAttribute('upper') ||  '3.14') :  3.14;
 
-          // origin group = joint's position + rpy offset (fixed)
-          var originGroup = new THREE.Group();
-          originGroup.name = 'jOrig:' + jname;
-          originGroup.position.set(xyz[0], xyz[1], xyz[2]);
-          originGroup.rotation.set(rpy[0], rpy[1], rpy[2]);
+          // origin group: fixed position/rotation offset from parent
+          var og = new THREE.Group();
+          og.name = 'jOrig:' + jname;
+          og.position.set(jxyz[0], jxyz[1], jxyz[2]);
+          og.rotation.set(jrpy[0], jrpy[1], jrpy[2]);
 
-          // pivot group = rotates for joint angle
-          var pivotGroup = new THREE.Group();
-          pivotGroup.name = 'jPivot:' + jname;
-          originGroup.add(pivotGroup);
+          // pivot group: spins for the joint angle
+          var pg = new THREE.Group();
+          pg.name = 'jPivot:' + jname;
+          og.add(pg);
 
           var childLink = links[childName];
-          if (childLink) pivotGroup.add(childLink);
+          if (childLink) pg.add(childLink);
 
           var parentLink = links[parentName];
-          if (parentLink) parentLink.add(originGroup);
+          if (parentLink) parentLink.add(og);
 
-          childLinks[childName] = true;
+          childSet[childName] = true;
 
           if (jtype !== 'fixed') {
-            joints[jname] = { pivot: pivotGroup, axis: axisVec, lower: lower, upper: upper };
+            joints[jname] = { pivot: pg, axis: axVec, lower: lower, upper: upper };
           }
         }
 
-        // 3. Find root link and attach to scene
-        var rootGroup = new THREE.Group();
-        // Convert URDF Z-up to Three.js Y-up
-        rootGroup.rotation.x = -Math.PI / 2;
+        // ── 3. Attach root link to scene ──
+        var root = new THREE.Group();
+        // Convert URDF Z-up to Three.js Y-up, then apply model scale
+        root.rotation.x = -Math.PI / 2;
+        root.scale.setScalar(MODEL_SCALE);
 
-        var linkNames = Object.keys(links);
-        for (var k = 0; k < linkNames.length; k++) {
-          if (!childLinks[linkNames[k]]) {
-            rootGroup.add(links[linkNames[k]]);
+        var names = Object.keys(links);
+        for (var k = 0; k < names.length; k++) {
+          if (!childSet[names[k]]) {
+            root.add(links[names[k]]);
             break;
           }
         }
-        self._scene.add(rootGroup);
+        self._scene.add(root);
         self._joints = joints;
       });
     }).catch(function (e) {
-      console.error('[RobotViewer] Failed to load URDF:', e);
+      console.error('[RobotViewer] URDF load failed:', e);
     });
   };
 
+  // ── Public API ─────────────────────────────────────
   RobotViewer.prototype.setJoint = function (name, angle) {
     var j = this._joints[name];
     if (!j) return;
-    var clamped = Math.max(j.lower, Math.min(j.upper, angle));
-    j.pivot.quaternion.setFromAxisAngle(j.axis, clamped);
+    j.pivot.quaternion.setFromAxisAngle(j.axis, Math.max(j.lower, Math.min(j.upper, angle)));
   };
 
   RobotViewer.prototype._loop = function () {
