@@ -13,29 +13,16 @@
     jaw:    { color: 0xddeeff, specular: 0x334466, shininess: 30  },
     rothead:{ color: 0xe8eef4, specular: 0x445566, shininess: 28  },
     default:{ color: 0xdde8f0, specular: 0x334455, shininess: 30  },
-    ear:    { color: 0x111111, specular: 0x222222, shininess: 20  },
   };
 
-  // Per-STL filename overrides (basename without extension)
-  var FILENAME_MAT = {
-    'Texture076': MAT.ear,
-    'Texture077': MAT.ear,
-  };
-
-  function materialFor(linkName, filename) {
+  function materialFor(linkName) {
     var T = window.THREE;
     var c;
-    if (filename) {
-      var base = filename.replace(/.*\//, '').replace(/\.stl$/i, '');
-      if (FILENAME_MAT[base]) c = FILENAME_MAT[base];
-    }
-    if (!c) {
-      if (linkName.indexOf('eye') !== -1 && linkName.indexOf('.001') === -1) c = MAT.eye;
-      else if (linkName === 'neck_link')                     c = MAT.neck;
-      else if (linkName.indexOf('jaw')     !== -1)           c = MAT.jaw;
-      else if (linkName.indexOf('rothead') !== -1)           c = MAT.rothead;
-      else c = MAT.default;
-    }
+    if (linkName.indexOf('eye') !== -1 && linkName.indexOf('.001') === -1) c = MAT.eye;
+    else if (linkName === 'neck_link')                     c = MAT.neck;
+    else if (linkName.indexOf('jaw')     !== -1)           c = MAT.jaw;
+    else if (linkName.indexOf('rothead') !== -1)           c = MAT.rothead;
+    else c = MAT.default;
     return new T.MeshPhongMaterial({ color: c.color, specular: c.specular, shininess: c.shininess });
   }
 
@@ -150,7 +137,7 @@
 
               var filename = meshEl.getAttribute('filename');
               var scaleArr = parseVec3(meshEl.getAttribute('scale') || '1 1 1');
-              var mat      = materialFor(name, filename);
+              var mat      = materialFor(name);
               var originEl = visual.querySelector('origin');
               var xyz      = parseVec3(originEl ? originEl.getAttribute('xyz') : null);
               var rpy      = parseVec3(originEl ? originEl.getAttribute('rpy') : null);
