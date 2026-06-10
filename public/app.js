@@ -476,8 +476,8 @@ function applyDPad() {
   switch (robotState.padDir) {
     case 'left':  robotState.headAngle = Math.max(robotState.headAngle - 1.8, -35); break;
     case 'right': robotState.headAngle = Math.min(robotState.headAngle + 1.8,  35); break;
-    case 'up':    robotState.mouthOpen = Math.min(robotState.mouthOpen + 0.06,  1); break;
-    case 'down':  robotState.mouthOpen = Math.max(robotState.mouthOpen - 0.06,  0); break;
+    case 'up':    robotState.mouthOpen = Math.max(robotState.mouthOpen - 0.06,  0); break;
+    case 'down':  robotState.mouthOpen = Math.min(robotState.mouthOpen + 0.06,  1); break;
   }
   updateFaceAnimation();
 }
