@@ -1036,6 +1036,18 @@ body {
   border-radius: 4px;
   background: rgba(255,255,255,.04);
   border: 1px solid rgba(255,255,255,.06);
+  color: rgba(255,255,255,.35);
+  font-size: .85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .08s, transform .08s;
+}
+.dpad-center:active {
+  background: rgba(108,99,255,.35);
+  border-color: var(--primary);
+  transform: scale(.9);
 }
 .dpad-btn {
   width: 42px;

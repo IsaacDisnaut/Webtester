@@ -483,6 +483,20 @@ function applyDPad() {
 }
 
 function initDPad() {
+  const centerBtn = $('dpad-center');
+  if (centerBtn) {
+    function resetAll() {
+      robotState.headAngle = 0;
+      robotState.mouthOpen = 0;
+      robotState.analogX   = 0;
+      robotState.analogY   = 0;
+      updateFaceAnimation();
+      publishRobotState();
+    }
+    centerBtn.addEventListener('mousedown',  resetAll);
+    centerBtn.addEventListener('touchstart', (e) => { e.preventDefault(); resetAll(); }, { passive: false });
+  }
+
   ['up', 'down', 'left', 'right'].forEach((dir) => {
     const btn = $(`dpad-${dir}`);
 
