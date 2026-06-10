@@ -6,24 +6,24 @@
   // Blender-unit → metres scale factor (from properties.xacro model_scale)
   var MODEL_SCALE = 0.1196;
 
-  // Material palette keyed on link-name substrings (flat, no lighting)
+  // Material palette keyed on link-name substrings
   var MAT = {
-    eye:    0xf0f0ff,
-    neck:   0xd0dce8,
-    jaw:    0xddeeff,
-    rothead:0xe8eef4,
-    default:0xdde8f0,
+    eye:    { color: 0x888888, specular: 0xaaaaaa, shininess: 90 },
+    neck:   { color: 0x777777, specular: 0x555555, shininess: 35 },
+    jaw:    { color: 0x808080, specular: 0x555555, shininess: 30 },
+    rothead:{ color: 0x909090, specular: 0x666666, shininess: 28 },
+    default:{ color: 0x858585, specular: 0x555555, shininess: 30 },
   };
 
   function materialFor(linkName) {
     var T = window.THREE;
     var c;
     if (linkName.indexOf('eye') !== -1 && linkName.indexOf('.001') === -1) c = MAT.eye;
-    else if (linkName === 'neck_link')   c = MAT.neck;
-    else if (linkName.indexOf('jaw')     !== -1) c = MAT.jaw;
-    else if (linkName.indexOf('rothead') !== -1) c = MAT.rothead;
+    else if (linkName === 'neck_link')                     c = MAT.neck;
+    else if (linkName.indexOf('jaw')     !== -1)           c = MAT.jaw;
+    else if (linkName.indexOf('rothead') !== -1)           c = MAT.rothead;
     else c = MAT.default;
-    return new T.MeshBasicMaterial({ color: c });
+    return new T.MeshPhongMaterial({ color: c.color, specular: c.specular, shininess: c.shininess });
   }
 
   function parseVec3(str) {
