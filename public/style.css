@@ -939,21 +939,31 @@ body {
   overflow: hidden;
 }
 
-/* Face SVG */
+/* 3D model viewport */
 .robot-face-wrap {
   flex: 1;
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 40%, #1a2235 0%, #0d1117 100%);
+  box-shadow: 0 4px 24px rgba(0,0,0,.6);
+}
+#robot-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.robot-loading {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  min-height: 0;
-}
-.face-svg {
-  max-height: 100%;
-  max-width: 100%;
-  height: 100%;
-  width: auto;
-  filter: drop-shadow(0 4px 18px rgba(0,0,0,.55));
+  font-size: .82rem;
+  color: var(--text-muted);
+  pointer-events: none;
 }
 
 /* Controls row */

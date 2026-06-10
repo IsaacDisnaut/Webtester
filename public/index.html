@@ -163,45 +163,10 @@
       <!-- ── Robot Control Panel ── -->
       <div id="robot-panel" class="robot-panel" style="display:none">
 
-        <!-- Animated face model -->
+        <!-- 3D model viewer -->
         <div class="robot-face-wrap">
-          <svg id="face-svg" class="face-svg" viewBox="-110 -140 220 280" xmlns="http://www.w3.org/2000/svg">
-            <g id="face-group">
-              <!-- Hair (drawn behind head) -->
-              <ellipse cx="0" cy="-92" rx="85" ry="46" fill="#3d2b1f"/>
-              <rect x="-85" y="-138" width="170" height="54" fill="#3d2b1f"/>
-              <!-- Head -->
-              <ellipse cx="0" cy="-4" rx="82" ry="103" fill="#f5deb3" stroke="#d2a679" stroke-width="2"/>
-              <!-- Ears -->
-              <ellipse cx="-84" cy="-10" rx="11" ry="18" fill="#f5deb3" stroke="#d2a679" stroke-width="2"/>
-              <ellipse cx="84" cy="-10" rx="11" ry="18" fill="#f5deb3" stroke="#d2a679" stroke-width="2"/>
-              <!-- Eyebrows -->
-              <path d="M -52 -62 Q -31 -71 -10 -62" stroke="#3d2b1f" stroke-width="5" fill="none" stroke-linecap="round"/>
-              <path d="M 10 -62 Q 31 -71 52 -62" stroke="#3d2b1f" stroke-width="5" fill="none" stroke-linecap="round"/>
-              <!-- Eye whites -->
-              <ellipse cx="-31" cy="-34" rx="21" ry="15" fill="white" stroke="#ccc" stroke-width="1.5"/>
-              <ellipse cx="31" cy="-34" rx="21" ry="15" fill="white" stroke="#ccc" stroke-width="1.5"/>
-              <!-- Pupils (JS moves these) -->
-              <circle id="pupil-l" cx="-31" cy="-34" r="9" fill="#2c1a0e"/>
-              <circle id="pupil-r" cx="31" cy="-34" r="9" fill="#2c1a0e"/>
-              <!-- Eye shine -->
-              <circle id="shine-l" cx="-27" cy="-38" r="3.5" fill="white" opacity="0.85"/>
-              <circle id="shine-r" cx="35" cy="-38" r="3.5" fill="white" opacity="0.85"/>
-              <!-- Nose -->
-              <path d="M 0 -4 L -9 19 Q 0 25 9 19 Z" fill="#e8c49a" stroke="#c8a480" stroke-width="1"/>
-              <ellipse cx="-6.5" cy="17" rx="6" ry="5" fill="#f0cca8" stroke="#c8a480" stroke-width="1"/>
-              <ellipse cx="6.5" cy="17" rx="6" ry="5" fill="#f0cca8" stroke="#c8a480" stroke-width="1"/>
-              <!-- Cheeks -->
-              <ellipse cx="-60" cy="8" rx="20" ry="14" fill="#f8a0a0" opacity="0.2"/>
-              <ellipse cx="60" cy="8" rx="20" ry="14" fill="#f8a0a0" opacity="0.2"/>
-              <!-- Mouth interior (dark, appears when open) -->
-              <path id="mouth-interior" d="M -25 44 Q 0 54 25 44 Q 0 54 -25 44 Z" fill="#3a1818" opacity="0"/>
-              <!-- Upper lip (fixed) -->
-              <path d="M -28 44 Q -14 40 0 42 Q 14 40 28 44" stroke="#c06070" stroke-width="2.5" fill="#e89aaa" stroke-linejoin="round"/>
-              <!-- Lower lip (JS animates y when mouth opens) -->
-              <path id="mouth-lower" d="M -28 44 Q 0 54 28 44" stroke="#c06070" stroke-width="2.5" fill="#e89aaa"/>
-            </g>
-          </svg>
+          <canvas id="robot-canvas"></canvas>
+          <div id="robot-loading" class="robot-loading">Loading 3D model…</div>
         </div>
 
         <!-- Controls row: joystick | MQTT status | D-pad -->
@@ -406,6 +371,10 @@
   </div>
 
   <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+  <script src="https://unpkg.com/three@0.134.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.134.0/examples/js/loaders/STLLoader.js"></script>
+  <script src="https://unpkg.com/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="robot-viewer.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>
 </body>

@@ -1,0 +1,262 @@
+<?xml version="1.0"?>
+<robot name="inmoov_head">
+
+  <link name="base_link"/>
+
+  <!-- ── Head base ── -->
+  <link name="head_base_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/head_base.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="base_to_base" type="revolute">
+    <axis xyz="0 0 1"/>
+    <limit effort="1000" lower="-3.14" upper="0" velocity="0.5"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="head_base_link"/>
+  </joint>
+
+  <!-- ── Head ── -->
+  <link name="head_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/head.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="head_pan_joint" type="revolute">
+    <axis xyz="0 0 1"/>
+    <limit effort="1000" lower="-0.524" upper="0.524" velocity="1.0"/>
+    <origin rpy="0 0 0" xyz="0 0 0.0245"/>
+    <parent link="head_base_link"/>
+    <child link="head_link"/>
+  </joint>
+
+  <!-- ── Skull ── -->
+  <link name="skull_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/skull.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="skull_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0.044 0 -0.0245"/>
+    <parent link="head_link"/>
+    <child link="skull_link"/>
+  </joint>
+
+  <!-- ── Jaw ── -->
+  <link name="jaw_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/jaw.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="jaw_joint" type="revolute">
+    <axis xyz="0 1 0"/>
+    <limit effort="1000" lower="0" upper="0.436" velocity="1.0"/>
+    <origin rpy="0 0.09 0" xyz="0.0375 0.0005 0.0437"/>
+    <parent link="head_link"/>
+    <child link="jaw_link"/>
+  </joint>
+
+  <!-- ── Left ear ── -->
+  <link name="left_ear_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/earleftv1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="left_ear_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0.035 0.056 0.0437"/>
+    <parent link="head_link"/>
+    <child link="left_ear_link"/>
+  </joint>
+
+  <!-- ── Right ear ── -->
+  <link name="right_ear_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/earrightv1.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="right_ear_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0.035 -0.056 0.0437"/>
+    <parent link="head_link"/>
+    <child link="right_ear_link"/>
+  </joint>
+
+  <!-- ── Face panel ── -->
+  <link name="face_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/face.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="face_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0.0637 0.079"/>
+    <parent link="skull_link"/>
+    <child link="face_link"/>
+  </joint>
+
+  <!-- ── Eye support bar (tilt — up/down) ── -->
+  <link name="eyesupport_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/eyesupport.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="eyes_tilt_joint" type="revolute">
+    <axis xyz="0 1 0"/>
+    <limit effort="1000" lower="-0.349" upper="0.349" velocity="1.0"/>
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <parent link="face_link"/>
+    <child link="eyesupport_link"/>
+  </joint>
+
+  <!-- ── Right eye assembly (pan) ── -->
+  <link name="r_eyesupport_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/r_eyesupport.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="eyes_pan_joint" type="revolute">
+    <axis xyz="0 0 1"/>
+    <limit effort="1000" lower="-0.349" upper="0.349" velocity="1.0"/>
+    <origin rpy="0 0 0" xyz="0 0.033 -0.0036"/>
+    <parent link="eyesupport_link"/>
+    <child link="r_eyesupport_link"/>
+  </joint>
+
+  <link name="r_eye_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/eye.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="r_eye_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0.003 0 0"/>
+    <parent link="r_eyesupport_link"/>
+    <child link="r_eye_link"/>
+  </joint>
+
+  <link name="r_iris_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/iris.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="r_iris_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0.0061 0 0"/>
+    <parent link="r_eyesupport_link"/>
+    <child link="r_iris_link"/>
+  </joint>
+
+  <link name="r_camera_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/camera.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="r_camera_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="-0.001 0 0"/>
+    <parent link="r_eyesupport_link"/>
+    <child link="r_camera_link"/>
+  </joint>
+
+  <!-- ── Left eye assembly (pan — mirrors right) ── -->
+  <link name="l_eyesupport_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/l_eyesupport.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+
+  <joint name="l_eye_pan_joint" type="revolute">
+    <axis xyz="0 0 1"/>
+    <limit effort="1000" lower="-0.349" upper="0.349" velocity="1.0"/>
+    <origin rpy="0 0 0" xyz="0 -0.033 -0.0036"/>
+    <parent link="eyesupport_link"/>
+    <child link="l_eyesupport_link"/>
+  </joint>
+
+  <link name="l_eye_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/eye.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="l_eye_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0.003 0 0"/>
+    <parent link="l_eyesupport_link"/>
+    <child link="l_eye_link"/>
+  </joint>
+
+  <link name="l_iris_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/iris.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="l_iris_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0.0061 0 0"/>
+    <parent link="l_eyesupport_link"/>
+    <child link="l_iris_link"/>
+  </joint>
+
+  <link name="l_camera_link">
+    <visual>
+      <geometry>
+        <mesh filename="/robot/meshes/camera.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+  <joint name="l_camera_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="-0.001 0 0"/>
+    <parent link="l_eyesupport_link"/>
+    <child link="l_camera_link"/>
+  </joint>
+
+</robot>

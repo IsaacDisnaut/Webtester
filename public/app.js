@@ -350,32 +350,23 @@ let mqttClient          = null;
 let robotPanelReady     = false;
 let dpadInterval        = null;
 
-// ── Face animation ───────────────────────────────
-function setSVGAttr(id, attr, val) {
-  const el = document.getElementById(id);
-  if (el) el.setAttribute(attr, String(val));
+// ── Three.js joint driver ────────────────────────
+function updateRobotModel() {
+  const rv = window.robotViewer;
+  if (!rv) return;
+  // D-pad left/right → head pan (degrees → radians)
+  rv.setJoint('head_pan_joint',  robotState.headAngle * Math.PI / 180);
+  // D-pad up/down → jaw open (0..1 → 0..0.436 rad ≈ 25°)
+  rv.setJoint('jaw_joint',       robotState.mouthOpen * 0.436);
+  // Analog X → both eye pan joints (mimic)
+  rv.setJoint('eyes_pan_joint',  robotState.analogX * 0.349);
+  rv.setJoint('l_eye_pan_joint', robotState.analogX * 0.349);
+  // Analog Y → eye tilt (positive joystick-down → eyes tilt down → positive angle)
+  rv.setJoint('eyes_tilt_joint', robotState.analogY * 0.349);
 }
 
-function updateFaceAnimation() {
-  // Pupils stay inside eye whites (rx=21, ry=15, pupil r=9 → max offset rx-r=12, ry-r=6)
-  const px = robotState.analogX * 12;
-  const py = robotState.analogY * 6;
-
-  setSVGAttr('pupil-l', 'cx', -31 + px);  setSVGAttr('pupil-l', 'cy', -34 + py);
-  setSVGAttr('pupil-r', 'cx',  31 + px);  setSVGAttr('pupil-r', 'cy', -34 + py);
-  setSVGAttr('shine-l', 'cx', -27 + px);  setSVGAttr('shine-l', 'cy', -38 + py);
-  setSVGAttr('shine-r', 'cx',  35 + px);  setSVGAttr('shine-r', 'cy', -38 + py);
-
-  // Head rotation (the whole face group rotates around its centre)
-  const fg = document.getElementById('face-group');
-  if (fg) fg.setAttribute('transform', `rotate(${robotState.headAngle.toFixed(1)})`);
-
-  // Mouth: lower lip control-point y goes from 54 (closed) to 74 (fully open)
-  const lowerY = 54 + robotState.mouthOpen * 20;
-  setSVGAttr('mouth-lower',   'd', `M -28 44 Q 0 ${lowerY} 28 44`);
-  setSVGAttr('mouth-interior','d', `M -25 44 Q 0 54 25 44 Q 0 ${lowerY} -25 44 Z`);
-  setSVGAttr('mouth-interior','opacity', (robotState.mouthOpen * 0.85).toFixed(2));
-}
+// Keep old name as alias so any remaining callers don't break
+var updateFaceAnimation = updateRobotModel;
 
 // ── MQTT ─────────────────────────────────────────
 function connectMQTT() {
@@ -526,7 +517,19 @@ function initRobotPanel() {
     robotPanelReady = true;
     initJoystick();
     initDPad();
-    updateFaceAnimation();
+
+    const canvas  = document.getElementById('robot-canvas');
+    const loading = document.getElementById('robot-loading');
+    if (canvas && window.RobotViewer) {
+      new window.RobotViewer(canvas).init().then(function (rv) {
+        window.robotViewer = rv;
+        if (loading) loading.style.display = 'none';
+        updateRobotModel();
+      }).catch(function (e) {
+        console.error('RobotViewer init failed:', e);
+        if (loading) loading.textContent = '3D model failed to load';
+      });
+    }
   }
   connectMQTT();
 }

@@ -37,6 +37,9 @@ app.set('trust proxy', 1);        // required behind Railway / Render / fly.io p
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Serve InMoov STL meshes at /robot/meshes/*
+app.use('/robot/meshes', express.static(path.join(__dirname, '../meshes')));
+
 // ── AI proxy ────────────────────────────────────────────────
 app.post('/api/ai', async (req, res) => {
   const { provider, baseUrl, apiKey, model, messages, systemPrompt } = req.body;
