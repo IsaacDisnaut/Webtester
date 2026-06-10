@@ -170,6 +170,8 @@ const DEFAULT_SETTINGS = {
   turnUrl: '',
   turnUser: '',
   turnPass: '',
+  mqttUrl: '',
+  mqttTopic: 'robot/control',
 };
 
 function loadSettings() {
@@ -296,24 +298,237 @@ function applyMode(mode) {
     b.classList.toggle('active', b.dataset.mode === mode)
   );
 
+  const robotPanel = $('robot-panel');
+  const remoteWrap = $('remote-wrap');
+  const localWrap  = $('local-wrap');
+
+  if (mode === 'robot') {
+    // Show robot panel; hide video elements. WebRTC is NOT touched.
+    robotPanel.style.display = 'flex';
+    remoteWrap.style.display = 'none';
+    localWrap.style.display  = 'none';
+    // Keep room-bar if already in a room so the user can see connection state
+    roomBar.style.display = currentRoomId ? 'block' : 'none';
+    if (recognition) recognition.lang = 'th-TH';
+    initRobotPanel();
+  } else {
+    robotPanel.style.display = 'none';
+    remoteWrap.style.display = '';
+    localWrap.style.display  = '';
+  }
+
   if (mode === 'ai') {
     roomBar.style.display = 'none';
     aiAvatar.style.display = 'flex';
     remoteVideo.classList.remove('active');
     remoteName.textContent = 'AI Assistant';
     if (recognition) recognition.lang = 'en-US';
-  } else {
+  } else if (mode === 'person') {
     roomBar.style.display = 'block';
     if (!currentRoomId) generateRoomCode();
     else aiAvatar.style.display = 'none';
-    // Thai is priority language for person mode
     if (recognition) recognition.lang = 'th-TH';
   }
 
-  // Restart recognition with the new language if it's active
   if (state.speechOn && recognition) {
     try { recognition.stop(); } catch {}
   }
+}
+
+// ════════════════════════════════════════════════
+//  ROBOT CONTROL PANEL
+// ════════════════════════════════════════════════
+const robotState = {
+  analogX:   0,   // -1..1  eye left/right
+  analogY:   0,   // -1..1  eye up/down
+  headAngle: 0,   // degrees, -35..35
+  mouthOpen: 0,   // 0..1
+  padDir:    null,
+};
+
+let mqttClient          = null;
+let robotPanelReady     = false;
+let dpadInterval        = null;
+
+// ── Face animation ───────────────────────────────
+function setSVGAttr(id, attr, val) {
+  const el = document.getElementById(id);
+  if (el) el.setAttribute(attr, String(val));
+}
+
+function updateFaceAnimation() {
+  // Pupils stay inside eye whites (rx=21, ry=15, pupil r=9 → max offset rx-r=12, ry-r=6)
+  const px = robotState.analogX * 12;
+  const py = robotState.analogY * 6;
+
+  setSVGAttr('pupil-l', 'cx', -31 + px);  setSVGAttr('pupil-l', 'cy', -34 + py);
+  setSVGAttr('pupil-r', 'cx',  31 + px);  setSVGAttr('pupil-r', 'cy', -34 + py);
+  setSVGAttr('shine-l', 'cx', -27 + px);  setSVGAttr('shine-l', 'cy', -38 + py);
+  setSVGAttr('shine-r', 'cx',  35 + px);  setSVGAttr('shine-r', 'cy', -38 + py);
+
+  // Head rotation (the whole face group rotates around its centre)
+  const fg = document.getElementById('face-group');
+  if (fg) fg.setAttribute('transform', `rotate(${robotState.headAngle.toFixed(1)})`);
+
+  // Mouth: lower lip control-point y goes from 54 (closed) to 74 (fully open)
+  const lowerY = 54 + robotState.mouthOpen * 20;
+  setSVGAttr('mouth-lower',   'd', `M -28 44 Q 0 ${lowerY} 28 44`);
+  setSVGAttr('mouth-interior','d', `M -25 44 Q 0 54 25 44 Q 0 ${lowerY} -25 44 Z`);
+  setSVGAttr('mouth-interior','opacity', (robotState.mouthOpen * 0.85).toFixed(2));
+}
+
+// ── MQTT ─────────────────────────────────────────
+function connectMQTT() {
+  const url   = settings.mqttUrl || '';
+  const topic = settings.mqttTopic || 'robot/control';
+  const dot   = $('mqtt-dot');
+  const txt   = $('mqtt-status-text');
+
+  if (!url) { txt.textContent = 'Set broker URL in Settings'; dot.className = 'mqtt-dot'; return; }
+  if (!window.mqtt) { txt.textContent = 'mqtt.js not loaded'; return; }
+
+  if (mqttClient) {
+    try { mqttClient.end(true); } catch {}
+    mqttClient = null;
+  }
+
+  txt.textContent = 'Connecting…';
+  dot.className = 'mqtt-dot';
+
+  try {
+    mqttClient = window.mqtt.connect(url, {
+      keepalive: 30,
+      reconnectPeriod: 5000,
+      connectTimeout: 8000,
+      clean: true,
+    });
+    mqttClient.on('connect', () => {
+      txt.textContent = url.replace('ws://', '').replace('wss://', '').split('/')[0];
+      dot.className = 'mqtt-dot connected';
+    });
+    mqttClient.on('error', (e) => {
+      txt.textContent = e.message || 'Error';
+      dot.className = 'mqtt-dot error';
+    });
+    mqttClient.on('close', () => {
+      if (txt.textContent !== 'Connecting…') {
+        txt.textContent = 'Disconnected';
+        dot.className = 'mqtt-dot';
+      }
+    });
+  } catch (e) {
+    txt.textContent = 'Failed: ' + e.message;
+    dot.className = 'mqtt-dot error';
+  }
+}
+
+function publishRobotState() {
+  if (!mqttClient || !mqttClient.connected) return;
+  const topic = settings.mqttTopic || 'robot/control';
+  const msg = JSON.stringify({
+    Pad:    robotState.padDir,
+    Analog: {
+      x: +robotState.analogX.toFixed(3),
+      y: +robotState.analogY.toFixed(3),
+    },
+  });
+  mqttClient.publish(topic, msg);
+}
+
+// ── Joystick ─────────────────────────────────────
+function initJoystick() {
+  const base  = $('joystick-base');
+  const thumb = $('joystick-thumb');
+  let active = false;
+
+  function getCenter() {
+    const r = base.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, maxR: r.width * 0.35 };
+  }
+
+  function move(clientX, clientY) {
+    const c  = getCenter();
+    let dx   = clientX - c.x;
+    let dy   = clientY - c.y;
+    const d  = Math.sqrt(dx * dx + dy * dy);
+    if (d > c.maxR) { dx = dx / d * c.maxR; dy = dy / d * c.maxR; }
+    thumb.style.transform     = `translate(${dx}px,${dy}px)`;
+    thumb.classList.add('active');
+    robotState.analogX = +(dx / c.maxR).toFixed(3);
+    robotState.analogY = +(dy / c.maxR).toFixed(3);
+    updateFaceAnimation();
+    publishRobotState();
+  }
+
+  function release() {
+    if (!active) return;
+    active = false;
+    thumb.style.transform = 'translate(0,0)';
+    thumb.classList.remove('active');
+    robotState.analogX = 0;
+    robotState.analogY = 0;
+    updateFaceAnimation();
+    publishRobotState();
+  }
+
+  base.addEventListener('mousedown',  (e) => { active = true; move(e.clientX, e.clientY); });
+  base.addEventListener('touchstart', (e) => { e.preventDefault(); active = true; move(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+  document.addEventListener('mousemove',  (e) => { if (active) move(e.clientX, e.clientY); });
+  document.addEventListener('touchmove',  (e) => { if (active) { e.preventDefault(); move(e.touches[0].clientX, e.touches[0].clientY); } }, { passive: false });
+  document.addEventListener('mouseup',   release);
+  document.addEventListener('touchend',  release);
+}
+
+// ── D-pad ─────────────────────────────────────────
+function applyDPad() {
+  switch (robotState.padDir) {
+    case 'left':  robotState.headAngle = Math.max(robotState.headAngle - 1.8, -35); break;
+    case 'right': robotState.headAngle = Math.min(robotState.headAngle + 1.8,  35); break;
+    case 'up':    robotState.mouthOpen = Math.min(robotState.mouthOpen + 0.06,  1); break;
+    case 'down':  robotState.mouthOpen = Math.max(robotState.mouthOpen - 0.06,  0); break;
+  }
+  updateFaceAnimation();
+}
+
+function initDPad() {
+  ['up', 'down', 'left', 'right'].forEach((dir) => {
+    const btn = $(`dpad-${dir}`);
+
+    function press() {
+      robotState.padDir = dir;
+      btn.classList.add('pressed');
+      applyDPad();
+      publishRobotState();
+      if (dpadInterval) clearInterval(dpadInterval);
+      dpadInterval = setInterval(() => { applyDPad(); publishRobotState(); }, 50);
+    }
+
+    function release() {
+      if (robotState.padDir !== dir) return;
+      clearInterval(dpadInterval);
+      dpadInterval = null;
+      robotState.padDir = null;
+      btn.classList.remove('pressed');
+      publishRobotState();
+    }
+
+    btn.addEventListener('mousedown',   press);
+    btn.addEventListener('touchstart',  (e) => { e.preventDefault(); press(); }, { passive: false });
+    btn.addEventListener('mouseup',     release);
+    btn.addEventListener('touchend',    release);
+    btn.addEventListener('mouseleave',  release);
+  });
+}
+
+// ── Panel init (called once on first robot-mode entry) ──
+function initRobotPanel() {
+  if (!robotPanelReady) {
+    robotPanelReady = true;
+    initJoystick();
+    initDPad();
+    updateFaceAnimation();
+  }
+  connectMQTT();
 }
 
 // ════════════════════════════════════════════════
@@ -883,6 +1098,8 @@ function populateSettingsForm() {
   $('s-tts').checked     = settings.ttsEnabled;
   $('s-rate').value      = settings.ttsRate;
   $('rate-val').textContent = settings.ttsRate;
+  $('s-mqtt-url').value   = settings.mqttUrl   || '';
+  $('s-mqtt-topic').value = settings.mqttTopic || 'robot/control';
   $('s-turn-url').value  = settings.turnUrl  || '';
   $('s-turn-user').value = settings.turnUser || '';
   $('s-turn-pass').value = settings.turnPass || '';
@@ -898,6 +1115,8 @@ function readSettingsForm() {
     systemPrompt: $('s-system').value  || DEFAULT_SETTINGS.systemPrompt,
     ttsEnabled:   $('s-tts').checked,
     ttsRate:      parseFloat($('s-rate').value),
+    mqttUrl:      $('s-mqtt-url').value.trim(),
+    mqttTopic:    $('s-mqtt-topic').value.trim() || 'robot/control',
     turnUrl:      $('s-turn-url').value.trim(),
     turnUser:     $('s-turn-user').value.trim(),
     turnPass:     $('s-turn-pass').value.trim(),
@@ -959,6 +1178,8 @@ function bindEventListeners() {
     persistSettings(settings);
     closeSettingsModal();
     showSystemMsg('Settings saved.');
+    // Re-connect MQTT if broker URL changed while in robot mode
+    if (state.mode === 'robot') connectMQTT();
   });
 
   $('s-provider').addEventListener('change', (e) => toggleBaseUrlField(e.target.value));

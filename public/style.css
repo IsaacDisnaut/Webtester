@@ -927,9 +927,164 @@ body {
   gap: 10px;
 }
 
+/* ── Robot Control Panel ──────────────────────────────────── */
+.robot-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  padding: 12px 10px 8px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+/* Face SVG */
+.robot-face-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 0;
+}
+.face-svg {
+  max-height: 100%;
+  max-width: 100%;
+  height: 100%;
+  width: auto;
+  filter: drop-shadow(0 4px 18px rgba(0,0,0,.55));
+}
+
+/* Controls row */
+.robot-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.robot-ctrl-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.robot-ctrl-label {
+  font-size: .68rem;
+  color: var(--text-muted);
+  letter-spacing: .5px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Analog joystick */
+.joystick-base {
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.06);
+  border: 2px solid rgba(108,99,255,.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  box-shadow: 0 0 0 4px rgba(108,99,255,.08);
+}
+.joystick-base:active { cursor: grabbing; }
+.joystick-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 2px 12px rgba(108,99,255,.55);
+  position: absolute;
+  transition: box-shadow .1s;
+  pointer-events: none;
+}
+.joystick-thumb.active { box-shadow: 0 0 0 8px rgba(108,99,255,.2), 0 2px 12px rgba(108,99,255,.6); }
+
+/* D-pad */
+.dpad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.dpad-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.dpad-center {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.06);
+}
+.dpad-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: rgba(255,255,255,.08);
+  border: 1.5px solid rgba(255,255,255,.14);
+  color: var(--text-primary, #e2e8f0);
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  transition: background .08s, transform .08s;
+}
+.dpad-btn:active,
+.dpad-btn.pressed {
+  background: rgba(108,99,255,.35);
+  border-color: var(--primary);
+  transform: scale(.92);
+}
+
+/* MQTT status */
+.mqtt-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.mqtt-status-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .7rem;
+  color: var(--text-muted);
+  max-width: 110px;
+  text-align: center;
+  word-break: break-all;
+}
+.mqtt-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #555;
+  flex-shrink: 0;
+  transition: background .3s;
+}
+.mqtt-dot.connected { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.6); }
+.mqtt-dot.error     { background: #ef4444; }
+
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 680px) {
   .main { grid-template-columns: 1fr; grid-template-rows: 1fr 280px; }
   .chat-col { border-left: none; border-top: 1px solid var(--border); }
   .local-wrap { width: 110px; height: 80px; bottom: 68px; }
+  .joystick-base { width: 88px; height: 88px; }
+  .dpad-btn { width: 36px; height: 36px; font-size: .95rem; }
+  .dpad-center { width: 30px; height: 30px; }
 }
