@@ -1203,11 +1203,12 @@ function toggleBaseUrlField(provider) {
     keyField.placeholder = 'sk-…';
     keyField.style.opacity = '';
   }
-  // Auto-fill sensible model default when switching provider
+  // Replace model with a sensible default when the current value is from a different provider
   const modelInput = $('s-model');
-  if (provider === 'gemini' && !modelInput.value) modelInput.value = 'gemini-2.0-flash';
-  if (provider === 'anthropic' && !modelInput.value) modelInput.value = 'claude-sonnet-4-6';
-  if (provider === 'openai' && !modelInput.value) modelInput.value = 'gpt-4o-mini';
+  const cur = modelInput.value;
+  if (provider === 'gemini'    && !cur.startsWith('gemini-'))                             modelInput.value = 'gemini-2.0-flash';
+  if (provider === 'anthropic' && !cur.startsWith('claude-'))                             modelInput.value = 'claude-sonnet-4-6';
+  if (provider === 'openai'    && (cur.startsWith('gemini-') || cur.startsWith('claude-'))) modelInput.value = 'gpt-4o-mini';
 }
 
 function openSettingsModal()  { populateSettingsForm(); settingsOverlay.classList.add('open'); }

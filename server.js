@@ -78,7 +78,7 @@ app.post('/api/ai', async (req, res) => {
     if (provider === 'gemini') {
       const key = GEMINI_KEY || apiKey;
       if (!key) return res.status(503).json({ error: 'Gemini API key not configured — add apikey file or enter key in Settings' });
-      const geminiModel = model || 'gemini-2.0-flash';
+      const geminiModel = (model && model.startsWith('gemini-')) ? model : 'gemini-2.0-flash';
       // Convert OpenAI-style messages to Gemini format (role: 'user'|'model')
       const contents = messages.map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
