@@ -37,12 +37,15 @@ app.set('trust proxy', 1);        // required behind Railway / Render / fly.io p
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ── Gemini API key (read once at startup from ../apikey) ────
+// ── Gemini API key ───────────────────────────────────────────
+// Production (Railway): set GEMINI_API_KEY environment variable in Railway dashboard.
+// Local dev: key is read from ../apikey file.
 const GEMINI_KEY = (() => {
+  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY.trim();
   try { return fs.readFileSync(path.join(__dirname, '..', 'apikey'), 'utf8').trim(); } catch { return ''; }
 })();
-if (GEMINI_KEY) console.log('Gemini key loaded from apikey file.');
-else            console.warn('apikey file not found — /api/translate will be unavailable.');
+if (GEMINI_KEY) console.log('Gemini key loaded.');
+else            console.warn('No Gemini key — set GEMINI_API_KEY env var (Railway) or create ../apikey file (local).');
 
 // ── Gemini translate proxy ───────────────────────────────────
 app.post('/api/translate', async (req, res) => {
