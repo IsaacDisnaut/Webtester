@@ -417,8 +417,12 @@ function connectMQTT() {
 function publishRobotState() {
   if (!mqttClient || !mqttClient.connected) return;
   const topic = settings.mqttTopic || 'robot/control';
+  // Map headAngle (-35..35) → 30..100  and  mouthOpen (0..1) → 20..150
+  const headDeg  = Math.round(65 + robotState.headAngle);
+  const mouthDeg = Math.round(20 + robotState.mouthOpen * 130);
   const msg = JSON.stringify({
-    Pad:    robotState.padDir,
+    Head:   headDeg,
+    Mouth:  mouthDeg,
     Analog: {
       x: +robotState.analogX.toFixed(3),
       y: +robotState.analogY.toFixed(3),
