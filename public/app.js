@@ -170,7 +170,7 @@ const DEFAULT_SETTINGS = {
   turnUrl: '',
   turnUser: '',
   turnPass: '',
-  mqttUrl: 'wss://broker.hivemq.com:8884/mqtt',
+  mqttUrl: 'wss://localhost:9443',
   mqttTopic: 'robot/control',
 };
 
