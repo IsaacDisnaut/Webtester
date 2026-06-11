@@ -1192,7 +1192,22 @@ function readSettingsForm() {
 }
 
 function toggleBaseUrlField(provider) {
-  $('field-baseurl').style.display = provider === 'anthropic' ? 'none' : 'flex';
+  const hideUrl = provider === 'anthropic' || provider === 'gemini';
+  $('field-baseurl').style.display = hideUrl ? 'none' : 'flex';
+  // For Gemini, the key comes from the server's apikey file; grey-out the field
+  const keyField = $('s-apikey');
+  if (provider === 'gemini') {
+    keyField.placeholder = '(uses apikey file on server — leave blank)';
+    keyField.style.opacity = '0.5';
+  } else {
+    keyField.placeholder = 'sk-…';
+    keyField.style.opacity = '';
+  }
+  // Auto-fill sensible model default when switching provider
+  const modelInput = $('s-model');
+  if (provider === 'gemini' && !modelInput.value) modelInput.value = 'gemini-2.0-flash';
+  if (provider === 'anthropic' && !modelInput.value) modelInput.value = 'claude-sonnet-4-6';
+  if (provider === 'openai' && !modelInput.value) modelInput.value = 'gpt-4o-mini';
 }
 
 function openSettingsModal()  { populateSettingsForm(); settingsOverlay.classList.add('open'); }

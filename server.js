@@ -75,7 +75,27 @@ app.post('/api/ai', async (req, res) => {
   const { provider, baseUrl, apiKey, model, messages, systemPrompt } = req.body;
   try {
     let text;
-    if (provider === 'anthropic') {
+    if (provider === 'gemini') {
+      const key = GEMINI_KEY || apiKey;
+      if (!key) return res.status(503).json({ error: 'Gemini API key not configured — add apikey file or enter key in Settings' });
+      const geminiModel = model || 'gemini-2.0-flash';
+      // Convert OpenAI-style messages to Gemini format (role: 'user'|'model')
+      const contents = messages.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
+      const body = {
+        contents,
+        generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
+      };
+      if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] };
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${key}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+      );
+      if (!r.ok) return res.status(r.status).json({ error: await r.text() });
+      text = (await r.json()).candidates?.[0]?.content?.parts?.[0]?.text || '';
+    } else if (provider === 'anthropic') {
       const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
