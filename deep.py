@@ -22,29 +22,22 @@ import ssl
 import argparse
 import paho.mqtt.client as mqtt
 
-DEFAULT_HOST  = "localhost"
-DEFAULT_PORT  = 1883
+DEFAULT_HOST  = "broker.hivemq.com"
+DEFAULT_PORT  = 8884
 DEFAULT_TOPIC = "robot/control"
+DEFAULT_WSS   = True
 
 
-def on_connect(client, userdata, flags, rc):
-    codes = {
-        0: "Connected",
-        1: "Bad protocol version",
-        2: "Client ID rejected",
-        3: "Server unavailable",
-        4: "Bad credentials",
-        5: "Not authorised",
-    }
-    if rc == 0:
-        print(f"[OK] {codes[rc]} → subscribing to '{userdata['topic']}'")
+def on_connect(client, userdata, _flags, reason_code, _properties=None):
+    if str(reason_code) == "Success":
+        print(f"[OK] Connected → subscribing to '{userdata['topic']}'")
         client.subscribe(userdata["topic"])
     else:
-        print(f"[ERROR] Connection failed: {codes.get(rc, rc)}")
+        print(f"[ERROR] Connection failed: {reason_code}")
 
 
-def on_disconnect(client, userdata, rc):
-    print(f"[INFO] Disconnected (rc={rc})")
+def on_disconnect(_client, _userdata, _disconnect_flags=None, _reason_code=None, _properties=None):
+    print("[INFO] Disconnected")
 
 
 def on_message(client, userdata, msg):
@@ -84,16 +77,17 @@ def main():
     parser.add_argument("--no-verify", action="store_true",   help="Skip TLS certificate verification (self-signed certs)")
     args = parser.parse_args()
 
-    # Pick transport and default port
-    if args.wss:
+    # Pick transport and default port (default: WSS on HiveMQ)
+    use_wss = args.wss or (not args.ws and DEFAULT_WSS and not args.port)
+    if use_wss or args.wss:
         transport    = "websockets"
-        default_port = 9443
+        default_port = DEFAULT_PORT
     elif args.ws:
         transport    = "websockets"
         default_port = 9001
     else:
         transport    = "tcp"
-        default_port = DEFAULT_PORT
+        default_port = 1883
 
     port = args.port if args.port else default_port
 
@@ -104,14 +98,14 @@ def main():
     client.on_message    = on_message
 
     # TLS for WSS
-    if args.wss:
+    if use_wss or args.wss:
         if args.no_verify:
             client.tls_set(cert_reqs=ssl.CERT_NONE)
             client.tls_insecure_set(True)
         else:
             client.tls_set()
 
-    proto = "wss" if args.wss else ("ws" if args.ws else "mqtt")
+    proto = "wss" if (use_wss or args.wss) else ("ws" if args.ws else "mqtt")
     print(f"Connecting to {proto}://{args.host}:{port}  topic: {args.topic}")
     print("Press Ctrl+C to quit.\n")
 
