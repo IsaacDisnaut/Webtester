@@ -37,6 +37,39 @@ app.set('trust proxy', 1);        // required behind Railway / Render / fly.io p
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ── Gemini API key (read once at startup from ../apikey) ────
+const GEMINI_KEY = (() => {
+  try { return fs.readFileSync(path.join(__dirname, '..', 'apikey'), 'utf8').trim(); } catch { return ''; }
+})();
+if (GEMINI_KEY) console.log('Gemini key loaded from apikey file.');
+else            console.warn('apikey file not found — /api/translate will be unavailable.');
+
+// ── Gemini translate proxy ───────────────────────────────────
+app.post('/api/translate', async (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: 'text required' });
+  if (!GEMINI_KEY) return res.status(503).json({ error: 'Gemini API key not configured' });
+  try {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Translate the following text. If it is Thai, translate to English. If it is English, translate to Thai. Output ONLY the translation, no explanation.\n\n${text}` }] }],
+          generationConfig: { maxOutputTokens: 512, temperature: 0.1 },
+        }),
+      }
+    );
+    if (!r.ok) return res.status(r.status).json({ error: await r.text() });
+    const data = await r.json();
+    const translated = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    res.json({ translated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── AI proxy ────────────────────────────────────────────────
 app.post('/api/ai', async (req, res) => {
   const { provider, baseUrl, apiKey, model, messages, systemPrompt } = req.body;

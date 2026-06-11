@@ -151,6 +151,7 @@ const state = {
 const aiHistory = [];
 const peers = {};        // peerId → { pc, dc }
 let socket = null;
+let translateEnabled = false;
 let iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }; // fallback
 let recognition = null;
 let interimMsgEl = null;
@@ -605,7 +606,8 @@ function initSpeechRecognition() {
       if (state.mode === 'person') {
         const trimmed = finalChunk.trim();
         if (trimmed) {
-          appendMessage(currentUserName, trimmed, 'you');
+          const speechWrap = appendMessage(currentUserName, trimmed, 'you');
+          addTranslation(speechWrap, trimmed);
           sendToPeer(trimmed);
         }
       } else {
@@ -751,6 +753,43 @@ function togglePeerTTS() {
 }
 
 // ════════════════════════════════════════════════
+//  GEMINI LIVE TRANSLATE
+// ════════════════════════════════════════════════
+async function translateText(text) {
+  const res = await fetch('/api/translate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data.translated || '';
+}
+
+function addTranslation(msgWrap, text) {
+  if (!translateEnabled) return;
+  const el = document.createElement('div');
+  el.className = 'msg-translation loading';
+  el.textContent = '…';
+  msgWrap.appendChild(el);
+  translateText(text)
+    .then(t => { el.textContent = t; el.classList.remove('loading'); })
+    .catch(() => el.remove());
+}
+
+function toggleTranslate() {
+  translateEnabled = !translateEnabled;
+  const btn = $('translate-btn');
+  btn.classList.toggle('active-translate', translateEnabled);
+  btn.title = translateEnabled
+    ? 'Gemini Translate ON (Thai ↔ English)'
+    : 'Gemini Live Translate (Thai ↔ English)';
+  showSystemMsg(translateEnabled
+    ? 'Gemini Live Translate ON — Thai ↔ English translation shown under messages.'
+    : 'Gemini Translate OFF.');
+}
+
+// ════════════════════════════════════════════════
 //  CHAT UI
 // ════════════════════════════════════════════════
 function clearWelcome() {
@@ -852,7 +891,8 @@ async function sendMessage() {
   chatInput.value = '';
   autoResizeInput();
 
-  appendMessage(currentUserName, text, 'you');
+  const youWrap = appendMessage(currentUserName, text, 'you');
+  addTranslation(youWrap, text);
 
   if (state.mode === 'ai') {
     await sendToAI(text);
@@ -891,7 +931,8 @@ async function sendToAI(text) {
       aiHistory.pop();
     } else {
       aiHistory.push({ role: 'assistant', content: data.content });
-      appendMessage('AI', data.content, 'ai');
+      const aiWrap = appendMessage('AI', data.content, 'ai');
+      addTranslation(aiWrap, data.content);
       speak(data.content);
     }
   } catch (err) {
@@ -952,7 +993,8 @@ function initSocket() {
   });
 
   socket.on('chat-message', ({ from, message }) => {
-    appendMessage('Peer', message, 'peer');
+    const wrap = appendMessage('Peer', message, 'peer');
+    addTranslation(wrap, message);
     speakPeerMessage(message);
   });
 
@@ -1022,7 +1064,11 @@ function createPeerConnection(peerId) {
 function setupDataChannel(peerId, dc) {
   peers[peerId].dc = dc;
   dc.onopen = () => console.log('Data channel open with', peerId);
-  dc.onmessage = (e) => { appendMessage('Peer', e.data, 'peer'); speakPeerMessage(e.data); };
+  dc.onmessage = (e) => {
+    const wrap = appendMessage('Peer', e.data, 'peer');
+    addTranslation(wrap, e.data);
+    speakPeerMessage(e.data);
+  };
   dc.onerror = (e) => console.warn('DC error:', e);
 }
 
@@ -1173,6 +1219,7 @@ function bindEventListeners() {
   speechBtn.addEventListener('click', toggleSpeech);
   endBtn.addEventListener('click', endCall);
   $('peer-tts-btn').addEventListener('click', togglePeerTTS);
+  $('translate-btn').addEventListener('click', toggleTranslate);
 
   sendBtn.addEventListener('click', sendMessage);
   chatInput.addEventListener('keydown', (e) => {

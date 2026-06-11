@@ -667,6 +667,32 @@ body {
   box-shadow: 0 0 10px rgba(108,99,255,.3);
 }
 
+/* Gemini translate toggle */
+.translate-btn {
+  flex-shrink: 0;
+}
+.translate-btn.active-translate {
+  background: rgba(34,197,94,.15);
+  border-color: #22c55e;
+  color: #22c55e;
+  box-shadow: 0 0 10px rgba(34,197,94,.25);
+}
+
+/* Inline translation shown below a message bubble */
+.msg-translation {
+  font-size: 0.72rem;
+  font-style: italic;
+  color: var(--text-muted);
+  margin-top: 4px;
+  padding: 3px 8px;
+  border-left: 2px solid rgba(34,197,94,.35);
+  line-height: 1.4;
+  opacity: 0.85;
+}
+.msg-translation.loading {
+  opacity: 0.5;
+}
+
 /* Typing indicator */
 .typing-bubble {
   display: flex;
