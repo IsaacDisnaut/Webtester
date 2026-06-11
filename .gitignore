@@ -5,3 +5,4 @@ videocall.db-shm
 videocall.db-wal
 .env
 *.log
+apikey
