@@ -37,36 +37,60 @@ app.set('trust proxy', 1);        // required behind Railway / Render / fly.io p
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ── Gemini API key ───────────────────────────────────────────
-// Production (Railway): set GEMINI_API_KEY environment variable in Railway dashboard.
+// ── API key (Groq or Gemini) ─────────────────────────────────
+// Production (Railway): set API_KEY (or GEMINI_API_KEY) environment variable.
 // Local dev: key is read from ../apikey file.
-const GEMINI_KEY = (() => {
+const API_KEY = (() => {
+  if (process.env.API_KEY)        return process.env.API_KEY.trim();
   if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY.trim();
   try { return fs.readFileSync(path.join(__dirname, '..', 'apikey'), 'utf8').trim(); } catch { return ''; }
 })();
-if (GEMINI_KEY) console.log('Gemini key loaded.');
-else            console.warn('No Gemini key — set GEMINI_API_KEY env var (Railway) or create ../apikey file (local).');
+const KEY_PROVIDER = API_KEY.startsWith('gsk_') ? 'groq'
+                   : (API_KEY.startsWith('AIza') || API_KEY.startsWith('AQ.')) ? 'gemini' : '';
+const KEY_MODEL    = KEY_PROVIDER === 'groq' ? 'llama-3.3-70b-versatile' : 'gemini-2.0-flash';
+if (API_KEY) console.log(`API key loaded (${KEY_PROVIDER || 'unknown provider'}).`);
+else         console.warn('No API key — set API_KEY env var (Railway) or create ../apikey file (local).');
 
-// ── Gemini translate proxy ───────────────────────────────────
+// ── Provider defaults (lets frontend know which provider/model is pre-configured) ──
+app.get('/api/provider-defaults', (req, res) => {
+  res.json({
+    provider: KEY_PROVIDER || null,
+    model:    KEY_MODEL,
+    baseUrl:  KEY_PROVIDER === 'groq' ? 'https://api.groq.com/openai/v1' : null,
+  });
+});
+
+// ── Translate proxy (supports Groq/Llama and Gemini) ────────
 app.post('/api/translate', async (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: 'text required' });
-  if (!GEMINI_KEY) return res.status(503).json({ error: 'Gemini API key not configured' });
+  if (!API_KEY) return res.status(503).json({ error: 'No API key configured' });
+  const prompt = `Translate the following text. If it is Thai, translate to English. If it is English, translate to Thai. Output ONLY the translation, no explanation.\n\n${text}`;
   try {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
-      {
+    let translated;
+    if (KEY_PROVIDER === 'groq') {
+      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `Translate the following text. If it is Thai, translate to English. If it is English, translate to Thai. Output ONLY the translation, no explanation.\n\n${text}` }] }],
-          generationConfig: { maxOutputTokens: 512, temperature: 0.1 },
-        }),
-      }
-    );
-    if (!r.ok) return res.status(r.status).json({ error: await r.text() });
-    const data = await r.json();
-    const translated = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
+        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }], temperature: 0.1 }),
+      });
+      if (!r.ok) return res.status(r.status).json({ error: await r.text() });
+      translated = (await r.json()).choices[0].message.content.trim();
+    } else {
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: 512, temperature: 0.1 },
+          }),
+        }
+      );
+      if (!r.ok) return res.status(r.status).json({ error: await r.text() });
+      translated = (await r.json()).candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    }
     res.json({ translated });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -78,8 +102,23 @@ app.post('/api/ai', async (req, res) => {
   const { provider, baseUrl, apiKey, model, messages, systemPrompt } = req.body;
   try {
     let text;
-    if (provider === 'gemini') {
-      const key = GEMINI_KEY || apiKey;
+    if (provider === 'groq') {
+      const key = (API_KEY.startsWith('gsk_') ? API_KEY : null) || apiKey;
+      if (!key) return res.status(503).json({ error: 'Groq API key not configured — add apikey file or enter key in Settings' });
+      const allMsgs = [
+        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+        ...messages,
+      ];
+      const groqModel = (model && model.startsWith('llama')) ? model : 'llama-3.3-70b-versatile';
+      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model: groqModel, messages: allMsgs }),
+      });
+      if (!r.ok) return res.status(r.status).json({ error: await r.text() });
+      text = (await r.json()).choices[0].message.content;
+    } else if (provider === 'gemini') {
+      const key = (API_KEY.startsWith('AIza') || API_KEY.startsWith('AQ.') ? API_KEY : null) || apiKey;
       if (!key) return res.status(503).json({ error: 'Gemini API key not configured — add apikey file or enter key in Settings' });
       const geminiModel = (model && model.startsWith('gemini-')) ? model : 'gemini-2.0-flash';
       // Convert OpenAI-style messages to Gemini format (role: 'user'|'model')

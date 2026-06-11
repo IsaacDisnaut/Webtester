@@ -213,8 +213,22 @@ const settingsOverlay  = $('settings-overlay');
 // ════════════════════════════════════════════════
 //  BOOT
 // ════════════════════════════════════════════════
+// Load provider/model defaults from server (uses apikey file) if user has no saved settings
+async function fetchProviderDefaults() {
+  if (localStorage.getItem('vc_settings')) return;
+  try {
+    const res = await fetch('/api/provider-defaults');
+    const d = await res.json();
+    if (!d.provider) return;
+    settings.provider = d.provider;
+    settings.model    = d.model    || settings.model;
+    settings.baseUrl  = d.baseUrl  || settings.baseUrl;
+  } catch {}
+}
+
 // Called after successful login
 async function initApp() {
+  await fetchProviderDefaults();
   populateSettingsForm();
   bindEventListeners();
   initSocket();
@@ -609,6 +623,13 @@ function initSpeechRecognition() {
           const speechWrap = appendMessage(currentUserName, trimmed, 'you');
           addTranslation(speechWrap, trimmed);
           sendToPeer(trimmed);
+        }
+      } else if (state.mode === 'ai') {
+        const trimmed = finalChunk.trim();
+        if (trimmed) {
+          const speechWrap = appendMessage(currentUserName, trimmed, 'you');
+          addTranslation(speechWrap, trimmed);
+          sendToAI(trimmed);
         }
       } else {
         const sep = chatInput.value.trim() ? ' ' : '';
@@ -1192,23 +1213,23 @@ function readSettingsForm() {
 }
 
 function toggleBaseUrlField(provider) {
-  const hideUrl = provider === 'anthropic' || provider === 'gemini';
+  const hideUrl = provider === 'anthropic' || provider === 'gemini' || provider === 'groq';
   $('field-baseurl').style.display = hideUrl ? 'none' : 'flex';
-  // For Gemini, the key comes from the server's apikey file; grey-out the field
   const keyField = $('s-apikey');
-  if (provider === 'gemini') {
+  if (provider === 'gemini' || provider === 'groq') {
     keyField.placeholder = '(uses apikey file on server — leave blank)';
     keyField.style.opacity = '0.5';
   } else {
     keyField.placeholder = 'sk-…';
     keyField.style.opacity = '';
   }
-  // Replace model with a sensible default when the current value is from a different provider
+  // Replace model with a sensible default when switching providers
   const modelInput = $('s-model');
   const cur = modelInput.value;
-  if (provider === 'gemini'    && !cur.startsWith('gemini-'))                             modelInput.value = 'gemini-2.0-flash';
-  if (provider === 'anthropic' && !cur.startsWith('claude-'))                             modelInput.value = 'claude-sonnet-4-6';
-  if (provider === 'openai'    && (cur.startsWith('gemini-') || cur.startsWith('claude-'))) modelInput.value = 'gpt-4o-mini';
+  if (provider === 'groq'      && !cur.startsWith('llama') && !cur.startsWith('mixtral') && !cur.startsWith('gemma')) modelInput.value = 'llama-3.3-70b-versatile';
+  if (provider === 'gemini'    && !cur.startsWith('gemini-'))                                                         modelInput.value = 'gemini-2.0-flash';
+  if (provider === 'anthropic' && !cur.startsWith('claude-'))                                                         modelInput.value = 'claude-sonnet-4-6';
+  if (provider === 'openai'    && (cur.startsWith('gemini-') || cur.startsWith('claude-') || cur.startsWith('llama'))) modelInput.value = 'gpt-4o-mini';
 }
 
 function openSettingsModal()  { populateSettingsForm(); settingsOverlay.classList.add('open'); }
