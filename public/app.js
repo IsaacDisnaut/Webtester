@@ -588,7 +588,7 @@ function initSpeechRecognition() {
   recognition.continuous      = true;
   recognition.interimResults  = true;
   recognition.maxAlternatives = 1;
-  recognition.lang = 'en-US'; // updated to th-TH in person mode
+  recognition.lang = 'th-TH';
 
   // Exponential backoff for restarts: backs off after each session-end with no
   // result, resets to base on success. Prevents rapid-loop on persistent errors.
