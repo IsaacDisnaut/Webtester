@@ -166,7 +166,7 @@ const DEFAULT_SETTINGS = {
   apiKey: '',
   model: 'llama-3.3-70b-versatile',
   systemPrompt: 'คุณเป็นผู้ช่วยที่เป็นมิตรและมีประโยชน์ ตอบเป็นภาษาไทยเป็นหลักเสมอ ตอบสั้นกระชับ\nYou are a helpful assistant. Always reply in Thai first. Keep responses concise.',
-  ttsEnabled: false,
+  ttsEnabled: true,
   ttsRate: 1.0,
   turnUrl: '',
   turnUser: '',
@@ -704,6 +704,8 @@ function speak(text) {
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
   utt.rate = settings.ttsRate || 1;
+  const thaiVoice = getThaiVoice();
+  if (thaiVoice) { utt.voice = thaiVoice; utt.lang = 'th-TH'; }
   utt.onstart = () => { aiAvatar.classList.add('speaking'); aiSpeaking.style.display = 'block'; };
   utt.onend = utt.onerror = () => { aiAvatar.classList.remove('speaking'); aiSpeaking.style.display = 'none'; };
   window.speechSynthesis.speak(utt);
