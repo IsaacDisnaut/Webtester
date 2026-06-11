@@ -165,7 +165,7 @@ const DEFAULT_SETTINGS = {
   baseUrl: 'https://api.groq.com/openai/v1',
   apiKey: '',
   model: 'llama-3.3-70b-versatile',
-  systemPrompt: 'You are a helpful, friendly assistant. Keep responses concise and conversational.',
+  systemPrompt: 'คุณเป็นผู้ช่วยที่เป็นมิตรและมีประโยชน์ ตอบเป็นภาษาไทยเป็นหลักเสมอ ตอบสั้นกระชับ\nYou are a helpful assistant. Always reply in Thai first. Keep responses concise.',
   ttsEnabled: false,
   ttsRate: 1.0,
   turnUrl: '',
@@ -337,7 +337,7 @@ function applyMode(mode) {
     aiAvatar.style.display = 'flex';
     remoteVideo.classList.remove('active');
     remoteName.textContent = 'AI Assistant';
-    if (recognition) recognition.lang = 'en-US';
+    if (recognition) recognition.lang = 'th-TH';
   } else if (mode === 'person') {
     roomBar.style.display = 'block';
     if (!currentRoomId) generateRoomCode();
@@ -663,7 +663,7 @@ function initSpeechRecognition() {
 
 function enableSpeech() {
   if (!recognition) return;
-  recognition.lang = state.mode === 'person' ? 'th-TH' : 'en-US';
+  recognition.lang = 'th-TH';
   state.speechOn = true;
   // On mobile the Web Speech API and getUserMedia sometimes compete for the
   // microphone. Pause the local audio track while STT is active so speech
@@ -674,9 +674,9 @@ function enableSpeech() {
   try { recognition.start(); } catch {}
   speechBtn.classList.add('active-speech');
   speechIndicator.style.display = 'flex';
-  const hint = state.mode === 'person'
-    ? 'Speech ON (ภาษาไทย) — พูดได้เลย ส่งอัตโนมัติ'
-    : 'Speech ON — speak now, then press Enter to send.';
+  const hint = state.mode === 'robot'
+    ? 'Speech ON (ภาษาไทย) — พูดได้เลย'
+    : 'Speech ON (ภาษาไทย) — พูดได้เลย ส่งอัตโนมัติ';
   showSystemMsg(hint);
 }
 
