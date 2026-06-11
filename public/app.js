@@ -170,7 +170,7 @@ const DEFAULT_SETTINGS = {
   turnUrl: '',
   turnUser: '',
   turnPass: '',
-  mqttUrl: 'wss://localhost:9443',
+  mqttUrl: 'wss://test.mosquitto.org:8081',
   mqttTopic: 'robot/control',
 };
 

@@ -22,8 +22,8 @@ import ssl
 import argparse
 import paho.mqtt.client as mqtt
 
-DEFAULT_HOST  = "localhost"
-DEFAULT_PORT  = 9443
+DEFAULT_HOST  = "test.mosquitto.org"
+DEFAULT_PORT  = 8081
 DEFAULT_TOPIC = "robot/control"
 DEFAULT_WSS   = True
 
