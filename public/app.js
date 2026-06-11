@@ -161,10 +161,10 @@ let currentRoomId = null;
 //  SETTINGS
 // ════════════════════════════════════════════════
 const DEFAULT_SETTINGS = {
-  provider: 'openai',
-  baseUrl: 'https://api.openai.com/v1',
+  provider: 'groq',
+  baseUrl: 'https://api.groq.com/openai/v1',
   apiKey: '',
-  model: 'gpt-4o-mini',
+  model: 'llama-3.3-70b-versatile',
   systemPrompt: 'You are a helpful, friendly assistant. Keep responses concise and conversational.',
   ttsEnabled: false,
   ttsRate: 1.0,
@@ -215,7 +215,6 @@ const settingsOverlay  = $('settings-overlay');
 // ════════════════════════════════════════════════
 // Load provider/model defaults from server (uses apikey file) if user has no saved settings
 async function fetchProviderDefaults() {
-  if (localStorage.getItem('vc_settings')) return;
   try {
     const res = await fetch('/api/provider-defaults');
     const d = await res.json();
@@ -223,6 +222,7 @@ async function fetchProviderDefaults() {
     settings.provider = d.provider;
     settings.model    = d.model    || settings.model;
     settings.baseUrl  = d.baseUrl  || settings.baseUrl;
+    persistSettings(settings);
   } catch {}
 }
 
