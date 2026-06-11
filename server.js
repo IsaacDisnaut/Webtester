@@ -41,9 +41,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Production (Railway): set API_KEY (or GEMINI_API_KEY) environment variable.
 // Local dev: key is read from ../apikey file.
 const API_KEY = (() => {
-  if (process.env.API_KEY)        return process.env.API_KEY.trim();
-  if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY.trim();
-  try { return fs.readFileSync(path.join(__dirname, '..', 'apikey'), 'utf8').trim(); } catch { return ''; }
+  // File wins locally (so apikey file always overrides any stale env vars).
+  // On Railway the file doesn't exist, so env vars are used automatically.
+  try {
+    const k = fs.readFileSync(path.join(__dirname, '..', 'apikey'), 'utf8').trim();
+    if (k) return k;
+  } catch {}
+  return (process.env.API_KEY || process.env.GEMINI_API_KEY || '').trim();
 })();
 const KEY_PROVIDER = API_KEY.startsWith('gsk_') ? 'groq'
                    : (API_KEY.startsWith('AIza') || API_KEY.startsWith('AQ.')) ? 'gemini' : '';
