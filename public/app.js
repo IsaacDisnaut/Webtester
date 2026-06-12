@@ -139,6 +139,8 @@ function initLoginScreen() {
 // ════════════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════════════
+const IS_FACE = window.location.pathname === '/face';
+
 const state = {
   mode: 'ai',
   micOn: true,
@@ -234,9 +236,18 @@ async function initApp() {
   initSocket();
   initSpeechRecognition();
   await Promise.all([fetchIceConfig(), startLocalMedia()]);
-  applyMode('ai');
-  // Greet the user in chat
-  showSystemMsg(`Welcome, ${currentUserName}!`);
+
+  if (IS_FACE) {
+    // Hide mode nav — /face is always person-to-person
+    document.querySelector('.mode-nav').style.display = 'none';
+    applyMode('person');
+    // Hide room code/join UI; only show the status line
+    $('room-create').style.display = 'none';
+    showSystemMsg(`Welcome, ${currentUserName}! Waiting for someone to join…`);
+  } else {
+    applyMode('ai');
+    showSystemMsg(`Welcome, ${currentUserName}!`);
+  }
 }
 
 // ════════════════════════════════════════════════
@@ -340,7 +351,7 @@ function applyMode(mode) {
     if (recognition) recognition.lang = 'th-TH';
   } else if (mode === 'person') {
     roomBar.style.display = 'block';
-    if (!currentRoomId) generateRoomCode();
+    if (!currentRoomId) { IS_FACE ? joinRoom('FACE') : generateRoomCode(); }
     else aiAvatar.style.display = 'none';
     if (recognition) recognition.lang = 'th-TH';
   }
@@ -412,6 +423,19 @@ function connectMQTT() {
     mqttClient.on('connect', () => {
       txt.textContent = url.replace('ws://', '').replace('wss://', '').split('/')[0];
       dot.className = 'mqtt-dot connected';
+      mqttClient.subscribe(topic);
+    });
+    mqttClient.on('message', (_t, payload) => {
+      try {
+        const data = JSON.parse(payload.toString());
+        if (data.Head   !== undefined) robotState.headAngle = data.Head - 65;
+        if (data.Mouth  !== undefined) robotState.mouthOpen = (data.Mouth - 20) / 130;
+        if (data.Analog !== undefined) {
+          robotState.analogX = data.Analog.x ?? robotState.analogX;
+          robotState.analogY = data.Analog.y ?? robotState.analogY;
+        }
+        updateRobotModel();
+      } catch {}
     });
     mqttClient.on('error', (e) => {
       txt.textContent = e.message || 'Error';
@@ -467,7 +491,6 @@ function initJoystick() {
     thumb.classList.add('active');
     robotState.analogX = +(dx / c.maxR).toFixed(3);
     robotState.analogY = +(dy / c.maxR).toFixed(3);
-    updateFaceAnimation();
     publishRobotState();
   }
 
@@ -478,7 +501,6 @@ function initJoystick() {
     thumb.classList.remove('active');
     robotState.analogX = 0;
     robotState.analogY = 0;
-    updateFaceAnimation();
     publishRobotState();
   }
 
@@ -498,7 +520,6 @@ function applyDPad() {
     case 'up':    robotState.mouthOpen = Math.max(robotState.mouthOpen - 0.06,  0); break;
     case 'down':  robotState.mouthOpen = Math.min(robotState.mouthOpen + 0.06,  1); break;
   }
-  updateFaceAnimation();
 }
 
 function initDPad() {
@@ -509,7 +530,6 @@ function initDPad() {
       robotState.mouthOpen = 0;
       robotState.analogX   = 0;
       robotState.analogY   = 0;
-      updateFaceAnimation();
       publishRobotState();
     }
     centerBtn.addEventListener('mousedown',  resetAll);
@@ -1171,6 +1191,9 @@ function endCall() {
     remoteName.textContent = 'AI Assistant';
     aiHistory.length = 0;
     showSystemMsg('Conversation reset.');
+  } else if (IS_FACE) {
+    joinRoom('FACE');
+    showSystemMsg('Call ended. Waiting for someone to join…');
   } else {
     generateRoomCode();
     showSystemMsg('Call ended. New room code generated.');

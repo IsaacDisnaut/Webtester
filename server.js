@@ -35,6 +35,9 @@ const stmtGetAll = db.prepare(`SELECT * FROM sessions ORDER BY login_time DESC L
 const app = express();
 app.set('trust proxy', 1);        // required behind Railway / Render / fly.io proxies
 app.use(express.json({ limit: '10mb' }));
+// ── /face route — must be before express.static to avoid directory redirect ──
+app.get('/face', (req, res) => res.sendFile(path.join(__dirname, 'public', 'face', 'index.html')));
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── API key (Groq or Gemini) ─────────────────────────────────
