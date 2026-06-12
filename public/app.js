@@ -93,6 +93,14 @@ document.addEventListener('visibilitychange', () => {
 // ════════════════════════════════════════════════
 function initLoginScreen() {
   const screen  = $('login-screen');
+
+  // /face skips the login form and auto-joins as "FACE"
+  if (IS_FACE) {
+    screen.style.display = 'none';
+    doLogin('FACE').then(initApp).catch(() => initApp());
+    return;
+  }
+
   const form    = $('login-form');
   const input   = $('name-input');
   const errorEl = $('login-error');
@@ -515,10 +523,10 @@ function initJoystick() {
 // ── D-pad ─────────────────────────────────────────
 function applyDPad() {
   switch (robotState.padDir) {
-    case 'left':  robotState.headAngle = Math.max(robotState.headAngle - 1.8, -35); break;
-    case 'right': robotState.headAngle = Math.min(robotState.headAngle + 1.8,  35); break;
-    case 'up':    robotState.mouthOpen = Math.max(robotState.mouthOpen - 0.06,  0); break;
-    case 'down':  robotState.mouthOpen = Math.min(robotState.mouthOpen + 0.06,  1); break;
+    case 'left':  robotState.headAngle = Math.max(robotState.headAngle - 3, -35); break;
+    case 'right': robotState.headAngle = Math.min(robotState.headAngle + 3,  35); break;
+    case 'up':    robotState.mouthOpen = Math.max(robotState.mouthOpen - 0.10,  0); break;
+    case 'down':  robotState.mouthOpen = Math.min(robotState.mouthOpen + 0.10,  1); break;
   }
 }
 
