@@ -246,12 +246,11 @@ async function initApp() {
   await Promise.all([fetchIceConfig(), startLocalMedia()]);
 
   if (IS_FACE) {
-    // Hide mode nav — /face is always person-to-person
     document.querySelector('.mode-nav').style.display = 'none';
-    applyMode('person');
-    // Hide room code/join UI; only show the status line
-    $('room-create').style.display = 'none';
-    showSystemMsg(`Welcome, ${currentUserName}! Waiting for someone to join…`);
+    joinRoom('FACE');     // emit join-room before applyMode so currentRoomId is set
+    applyMode('robot');   // show 3D face panel; room bar appears because currentRoomId is set
+    $('room-create').style.display = 'none';  // hide code/join input row
+    showSystemMsg(`Connected as FACE — waiting for peer…`);
   } else {
     applyMode('ai');
     showSystemMsg(`Welcome, ${currentUserName}!`);
