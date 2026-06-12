@@ -401,6 +401,22 @@ function updateRobotModel() {
 // Keep old name as alias so any remaining callers don't break
 var updateFaceAnimation = updateRobotModel;
 
+// Shared parser used by both MQTT and WebRTC data channel
+function applyRobotPayload(str) {
+  try {
+    const data = JSON.parse(str);
+    if (data.Head === undefined && data.Mouth === undefined && data.Analog === undefined) return false;
+    if (data.Head   !== undefined) robotState.headAngle = data.Head - 65;
+    if (data.Mouth  !== undefined) robotState.mouthOpen = (data.Mouth - 20) / 130;
+    if (data.Analog !== undefined) {
+      robotState.analogX = data.Analog.x ?? robotState.analogX;
+      robotState.analogY = data.Analog.y ?? robotState.analogY;
+    }
+    updateRobotModel();
+    return true;
+  } catch { return false; }
+}
+
 // ── MQTT ─────────────────────────────────────────
 function connectMQTT() {
   const url   = settings.mqttUrl || '';
@@ -431,18 +447,7 @@ function connectMQTT() {
       dot.className = 'mqtt-dot connected';
       mqttClient.subscribe(topic);
     });
-    mqttClient.on('message', (_t, payload) => {
-      try {
-        const data = JSON.parse(payload.toString());
-        if (data.Head   !== undefined) robotState.headAngle = data.Head - 65;
-        if (data.Mouth  !== undefined) robotState.mouthOpen = (data.Mouth - 20) / 130;
-        if (data.Analog !== undefined) {
-          robotState.analogX = data.Analog.x ?? robotState.analogX;
-          robotState.analogY = data.Analog.y ?? robotState.analogY;
-        }
-        updateRobotModel();
-      } catch {}
-    });
+    mqttClient.on('message', (_t, payload) => { applyRobotPayload(payload.toString()); });
     mqttClient.on('error', (e) => {
       txt.textContent = e.message || 'Error';
       dot.className = 'mqtt-dot error';
@@ -460,9 +465,6 @@ function connectMQTT() {
 }
 
 function publishRobotState() {
-  if (!mqttClient || !mqttClient.connected) return;
-  const topic = settings.mqttTopic || 'robot/control';
-  // Map headAngle (-35..35) → 30..100  and  mouthOpen (0..1) → 20..150
   const headDeg  = Math.round(65 + robotState.headAngle);
   const mouthDeg = Math.round(20 + robotState.mouthOpen * 130);
   const msg = JSON.stringify({
@@ -473,7 +475,12 @@ function publishRobotState() {
       y: +robotState.analogY.toFixed(3),
     },
   });
-  mqttClient.publish(topic, msg);
+  // Primary: WebRTC data channel (direct peer-to-peer, no broker latency)
+  sendToPeer(msg);
+  // Also publish to MQTT so deep.py / serial still receives it
+  if (mqttClient && mqttClient.connected) {
+    mqttClient.publish(settings.mqttTopic || 'robot/control', msg);
+  }
 }
 
 // ── Joystick ─────────────────────────────────────
@@ -1114,6 +1121,7 @@ function setupDataChannel(peerId, dc) {
   peers[peerId].dc = dc;
   dc.onopen = () => console.log('Data channel open with', peerId);
   dc.onmessage = (e) => {
+    if (applyRobotPayload(e.data)) return;  // robot control — don't show as chat
     const wrap = appendMessage('Peer', e.data, 'peer');
     addTranslation(wrap, e.data);
     speakPeerMessage(e.data);
