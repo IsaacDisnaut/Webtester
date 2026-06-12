@@ -351,7 +351,7 @@ function applyMode(mode) {
     if (recognition) recognition.lang = 'th-TH';
   } else if (mode === 'person') {
     roomBar.style.display = 'block';
-    if (!currentRoomId) { IS_FACE ? joinRoom('FACE') : generateRoomCode(); }
+    if (!currentRoomId) joinRoom('FACE');
     else aiAvatar.style.display = 'none';
     if (recognition) recognition.lang = 'th-TH';
   }
@@ -1191,12 +1191,9 @@ function endCall() {
     remoteName.textContent = 'AI Assistant';
     aiHistory.length = 0;
     showSystemMsg('Conversation reset.');
-  } else if (IS_FACE) {
-    joinRoom('FACE');
-    showSystemMsg('Call ended. Waiting for someone to join…');
   } else {
-    generateRoomCode();
-    showSystemMsg('Call ended. New room code generated.');
+    joinRoom('FACE');
+    showSystemMsg('Call ended. Rejoining room FACE…');
   }
 }
 
