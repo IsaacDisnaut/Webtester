@@ -1127,6 +1127,43 @@ body {
 .mqtt-dot.connected { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.6); }
 .mqtt-dot.error     { background: #ef4444; }
 
+/* ── Face mode — full-screen robot head, no UI ──────────── */
+body.face-mode {
+  background: #000;
+  overflow: hidden;
+}
+body.face-mode .header,
+body.face-mode .chat-col,
+body.face-mode .room-bar,
+body.face-mode .local-wrap,
+body.face-mode .remote-wrap,
+body.face-mode #login-screen,
+body.face-mode .robot-controls-row {
+  display: none !important;
+}
+body.face-mode .main {
+  display: flex;
+  height: 100vh;
+}
+body.face-mode .video-col {
+  flex: 1;
+  background: #000;
+}
+body.face-mode #robot-panel {
+  display: flex !important;
+  flex: 1;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+body.face-mode .robot-face-wrap {
+  border-radius: 0;
+  box-shadow: none;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 680px) {
   .main { grid-template-columns: 1fr; grid-template-rows: 1fr 280px; }

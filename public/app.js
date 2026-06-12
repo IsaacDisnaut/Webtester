@@ -148,6 +148,7 @@ function initLoginScreen() {
 //  STATE
 // ════════════════════════════════════════════════
 const IS_FACE = window.location.pathname === '/face';
+if (IS_FACE) document.body.classList.add('face-mode');
 
 const state = {
   mode: 'ai',
@@ -246,11 +247,9 @@ async function initApp() {
   await Promise.all([fetchIceConfig(), startLocalMedia()]);
 
   if (IS_FACE) {
-    document.querySelector('.mode-nav').style.display = 'none';
-    joinRoom('FACE');     // emit join-room before applyMode so currentRoomId is set
-    applyMode('robot');   // show 3D face panel; room bar appears because currentRoomId is set
-    $('room-create').style.display = 'none';  // hide code/join input row
-    showSystemMsg(`Connected as FACE — waiting for peer…`);
+    document.body.classList.add('face-mode');
+    joinRoom('FACE');    // must be before applyMode so currentRoomId is set
+    applyMode('robot');
   } else {
     applyMode('ai');
     showSystemMsg(`Welcome, ${currentUserName}!`);
