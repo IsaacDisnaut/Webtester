@@ -176,7 +176,7 @@ const DEFAULT_SETTINGS = {
   baseUrl: 'https://api.groq.com/openai/v1',
   apiKey: '',
   model: 'llama-3.3-70b-versatile',
-  systemPrompt: 'You are a robot that identify yourself and man you can move your face to left and right, move your both eyes, and move your mouth up and down. During conversation type your emotion in {}',
+  systemPrompt: 'You are a male robot. You can move your face left-right, move both eyes, and open/close your mouth. In EVERY response include one emotion JSON anywhere in your message using EXACTLY this format: {"Head":65,"Mouth":30,"Analog":{"x":0,"y":0}}\nRanges: Head 20-150 (20=look left, 65=center, 150=look right), Mouth 30-100 (30=closed, 100=open/smile), Analog x -1 to 1 (eye pan), y -1 to 1 (eye tilt). Choose values that match your emotion.',
   ttsEnabled: true,
   ttsRate: 1.0,
   voiceGender: 'male',
@@ -264,6 +264,7 @@ async function initApp() {
   } else {
     applyMode('ai');
     showSystemMsg(`Welcome, ${currentUserName}!`);
+    if (settings.mqttUrl) connectMQTT(); // connect early so emotion publishes work in AI mode
   }
 }
 
@@ -999,6 +1000,42 @@ async function sendMessage() {
 }
 
 // ════════════════════════════════════════════════
+//  EMOTION DETECTION → MQTT robot/emotion
+// ════════════════════════════════════════════════
+// Extracts all top-level {...} blocks from text (handles nested braces like Analog:{}).
+function extractJsonBlocks(text) {
+  const blocks = [];
+  let depth = 0, start = -1;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{') { if (depth++ === 0) start = i; }
+    else if (text[i] === '}') {
+      if (--depth === 0 && start !== -1) { blocks.push(text.slice(start, i + 1)); start = -1; }
+    }
+  }
+  return blocks;
+}
+
+function publishEmotion(text) {
+  const topic = 'robot/emotion';
+  for (const block of extractJsonBlocks(text)) {
+    try {
+      const d = JSON.parse(block);
+      if (d.Head === undefined && d.Mouth === undefined && d.Analog === undefined) continue;
+      // Clamp values to valid ranges before publishing
+      const payload = JSON.stringify({
+        Head:   Math.min(150, Math.max(20,  Math.round(d.Head  ?? 65))),
+        Mouth:  Math.min(100, Math.max(30,  Math.round(d.Mouth ?? 30))),
+        Analog: {
+          x: Math.min(1, Math.max(-1, +(d.Analog?.x ?? 0).toFixed(3))),
+          y: Math.min(1, Math.max(-1, +(d.Analog?.y ?? 0).toFixed(3))),
+        },
+      });
+      if (mqttClient && mqttClient.connected) mqttClient.publish(topic, payload);
+    } catch {}
+  }
+}
+
+// ════════════════════════════════════════════════
 //  AI API
 // ════════════════════════════════════════════════
 async function sendToAI(text) {
@@ -1030,6 +1067,7 @@ async function sendToAI(text) {
       aiHistory.push({ role: 'assistant', content: data.content });
       const aiWrap = appendMessage('AI', data.content, 'ai');
       addTranslation(aiWrap, data.content);
+      publishEmotion(data.content);
       speak(data.content);
     }
   } catch (err) {
