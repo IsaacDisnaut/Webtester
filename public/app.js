@@ -1017,13 +1017,12 @@ function extractJsonBlocks(text) {
 }
 
 function publishEmotion(text) {
-  const topic = 'robot/emotion';
+  const emotions = [];
   for (const block of extractJsonBlocks(text)) {
     try {
       const d = JSON.parse(block);
       if (d.Head === undefined && d.Mouth === undefined && d.Analog === undefined) continue;
-      // Clamp values to valid ranges before publishing
-      const payload = JSON.stringify({
+      emotions.push({
         Head:   Math.min(150, Math.max(20,  Math.round(d.Head  ?? 65))),
         Mouth:  Math.min(100, Math.max(30,  Math.round(d.Mouth ?? 30))),
         Analog: {
@@ -1031,8 +1030,10 @@ function publishEmotion(text) {
           y: Math.min(1, Math.max(-1, +(d.Analog?.y ?? 0).toFixed(3))),
         },
       });
-      if (mqttClient && mqttClient.connected) mqttClient.publish(topic, payload);
     } catch {}
+  }
+  if (emotions.length && mqttClient && mqttClient.connected) {
+    mqttClient.publish('robot/emotion', JSON.stringify(emotions));
   }
 }
 
