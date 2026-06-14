@@ -179,6 +179,7 @@ const DEFAULT_SETTINGS = {
   systemPrompt: 'คุณเป็นผู้ช่วยที่เป็นมิตรและมีประโยชน์ ตอบเป็นภาษาไทยเป็นหลักเสมอ ตอบสั้นกระชับ\nYou are a helpful assistant. Always reply in Thai first. Keep responses concise.',
   ttsEnabled: true,
   ttsRate: 1.0,
+  voiceGender: 'male',
   turnUrl: '',
   turnUser: '',
   turnPass: '',
@@ -189,7 +190,15 @@ const DEFAULT_SETTINGS = {
 function loadSettings() {
   try {
     const s = localStorage.getItem('vc_settings');
-    return s ? { ...DEFAULT_SETTINGS, ...JSON.parse(s) } : { ...DEFAULT_SETTINGS };
+    const saved = s ? JSON.parse(s) : {};
+    return {
+      ...DEFAULT_SETTINGS,
+      ...saved,
+      // Provider is always forced back to Groq+Llama on every load
+      provider: 'groq',
+      model: 'llama-3.3-70b-versatile',
+      baseUrl: 'https://api.groq.com/openai/v1',
+    };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }
 function persistSettings(s) { localStorage.setItem('vc_settings', JSON.stringify(s)); }
@@ -765,7 +774,7 @@ function speak(text) {
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
   utt.rate = settings.ttsRate || 1;
-  const thaiVoice = getThaiVoice();
+  const thaiVoice = getThaiVoice(settings.voiceGender);
   if (thaiVoice) { utt.voice = thaiVoice; utt.lang = 'th-TH'; }
   utt.onstart = () => { aiAvatar.classList.add('speaking'); aiSpeaking.style.display = 'block'; };
   utt.onend = utt.onerror = () => { aiAvatar.classList.remove('speaking'); aiSpeaking.style.display = 'none'; };
@@ -789,10 +798,14 @@ function stopSpeaking() {
 let myTTSEnabled   = false;
 let peerTTSEnabled = false;
 
-// Pick a Thai voice if available, else use the system default
-function getThaiVoice() {
-  const voices = window.speechSynthesis?.getVoices() || [];
-  return voices.find(v => v.lang.startsWith('th')) || null;
+// Pick a Thai voice matching the requested gender (best-effort; falls back to any Thai voice)
+function getThaiVoice(gender = 'male') {
+  const voices = (window.speechSynthesis?.getVoices() || []).filter(v => v.lang.startsWith('th'));
+  if (!voices.length) return null;
+  const maleKw   = /male|man|niwat|narong|boy/i;
+  const femaleKw = /female|woman|pattara|kanya|girl/i;
+  const kw = gender === 'female' ? femaleKw : maleKw;
+  return voices.find(v => kw.test(v.name + v.voiceURI)) || voices[0];
 }
 
 // Called when an incoming peer message arrives — speak it if the peer has
@@ -801,7 +814,7 @@ function speakPeerMessage(text) {
   if (!peerTTSEnabled || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
-  const thai = getThaiVoice();
+  const thai = getThaiVoice(settings.voiceGender);
   if (thai) utt.voice = thai;
   utt.rate = 1.0;
   window.speechSynthesis.speak(utt);
@@ -813,7 +826,7 @@ function speakOnDemand(text) {
   unlockTTS();
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
-  const thai = getThaiVoice();
+  const thai = getThaiVoice(settings.voiceGender);
   if (thai) utt.voice = thai;
   utt.rate = 1.0;
   window.speechSynthesis.speak(utt);
@@ -1251,6 +1264,7 @@ function populateSettingsForm() {
   $('s-tts').checked     = settings.ttsEnabled;
   $('s-rate').value      = settings.ttsRate;
   $('rate-val').textContent = settings.ttsRate;
+  $('s-voice-gender').value = settings.voiceGender || 'male';
   $('s-mqtt-url').value   = settings.mqttUrl   || '';
   $('s-mqtt-topic').value = settings.mqttTopic || 'robot/control';
   $('s-turn-url').value  = settings.turnUrl  || '';
@@ -1268,6 +1282,7 @@ function readSettingsForm() {
     systemPrompt: $('s-system').value  || DEFAULT_SETTINGS.systemPrompt,
     ttsEnabled:   $('s-tts').checked,
     ttsRate:      parseFloat($('s-rate').value),
+    voiceGender:  $('s-voice-gender').value,
     mqttUrl:      $('s-mqtt-url').value.trim(),
     mqttTopic:    $('s-mqtt-topic').value.trim() || 'robot/control',
     turnUrl:      $('s-turn-url').value.trim(),
