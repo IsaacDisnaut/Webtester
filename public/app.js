@@ -772,7 +772,7 @@ function toggleSpeech() {
 function speak(text) {
   if (!settings.ttsEnabled || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
+  const utt = new SpeechSynthesisUtterance(text.replace(/\{[^}]*\}/g, '').trim());
   utt.rate = settings.ttsRate || 1;
   const thaiVoice = getThaiVoice(settings.voiceGender);
   if (thaiVoice) { utt.voice = thaiVoice; utt.lang = 'th-TH'; }
@@ -813,7 +813,7 @@ function getThaiVoice(gender = 'male') {
 function speakPeerMessage(text) {
   if (!peerTTSEnabled || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
+  const utt = new SpeechSynthesisUtterance(text.replace(/\{[^}]*\}/g, '').trim());
   const thai = getThaiVoice(settings.voiceGender);
   if (thai) utt.voice = thai;
   utt.rate = 1.0;
@@ -825,7 +825,7 @@ function speakOnDemand(text) {
   if (!window.speechSynthesis) return;
   unlockTTS();
   window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
+  const utt = new SpeechSynthesisUtterance(text.replace(/\{[^}]*\}/g, '').trim());
   const thai = getThaiVoice(settings.voiceGender);
   if (thai) utt.voice = thai;
   utt.rate = 1.0;
