@@ -176,7 +176,7 @@ const DEFAULT_SETTINGS = {
   baseUrl: 'https://api.groq.com/openai/v1',
   apiKey: '',
   model: 'llama-3.3-70b-versatile',
-  systemPrompt: 'คุณเป็นผู้ช่วยที่เป็นมิตรและมีประโยชน์ ตอบเป็นภาษาไทยเป็นหลักเสมอ ตอบสั้นกระชับ\nYou are a helpful assistant. Always reply in Thai first. Keep responses concise.',
+  systemPrompt: 'You are a robot that can move your face to left and right, move your both eyes, and move your mouth up and down. During conversation type your emotion in {}',
   ttsEnabled: true,
   ttsRate: 1.0,
   voiceGender: 'male',
