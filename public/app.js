@@ -194,10 +194,11 @@ function loadSettings() {
     return {
       ...DEFAULT_SETTINGS,
       ...saved,
-      // Provider is always forced back to Groq+Llama on every load
+      // Always reset to hardcoded defaults on every load
       provider: 'groq',
       model: 'llama-3.3-70b-versatile',
       baseUrl: 'https://api.groq.com/openai/v1',
+      systemPrompt: DEFAULT_SETTINGS.systemPrompt,
     };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }
