@@ -224,9 +224,11 @@ const settingsOverlay  = $('settings-overlay');
 // ════════════════════════════════════════════════
 //  BOOT
 // ════════════════════════════════════════════════
-// Load provider/model defaults from server (uses apikey file) if user has no saved settings
+// Load provider/model defaults from server (uses apikey file) only on first visit (no saved settings)
 async function fetchProviderDefaults() {
   try {
+    const hasSaved = !!localStorage.getItem('vc_settings');
+    if (hasSaved) return; // user has explicit settings — don't override
     const res = await fetch('/api/provider-defaults');
     const d = await res.json();
     if (!d.provider) return;
@@ -602,6 +604,28 @@ function initRobotPanel() {
 }
 
 // ════════════════════════════════════════════════
+//  STT CONTEXT CORRECTION
+// ════════════════════════════════════════════════
+// Sends the raw transcript + recent conversation to the server so the model
+// can fix Thai homophones / garbled words using context. Falls back to raw
+// text on any failure so the conversation never stalls.
+async function correctSTTWithContext(rawText) {
+  try {
+    const contextMessages = state.mode === 'ai' ? aiHistory.slice(-6) : [];
+    const res = await fetch('/api/stt-correct', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: rawText, messages: contextMessages }),
+    });
+    if (!res.ok) return rawText;
+    const { corrected } = await res.json();
+    return (corrected && corrected.trim()) ? corrected.trim() : rawText;
+  } catch {
+    return rawText;
+  }
+}
+
+// ════════════════════════════════════════════════
 //  SPEECH RECOGNITION
 // ════════════════════════════════════════════════
 function initSpeechRecognition() {
@@ -627,7 +651,7 @@ function initSpeechRecognition() {
   // result, resets to base on success. Prevents rapid-loop on persistent errors.
   let restartDelay = IS_MOBILE ? 600 : 0;
 
-  recognition.onresult = (e) => {
+  recognition.onresult = async (e) => {
     restartDelay = IS_MOBILE ? 600 : 0; // reset backoff on any successful result
 
     let interim = '';
@@ -649,24 +673,28 @@ function initSpeechRecognition() {
 
     if (finalChunk) {
       if (interimMsgEl) { interimMsgEl.remove(); interimMsgEl = null; }
+      const trimmed = finalChunk.trim();
+      if (!trimmed) return;
 
-      if (state.mode === 'person') {
-        const trimmed = finalChunk.trim();
-        if (trimmed) {
-          const speechWrap = appendMessage(currentUserName, trimmed, 'you');
-          addTranslation(speechWrap, trimmed);
-          sendToPeer(trimmed);
-        }
-      } else if (state.mode === 'ai') {
-        const trimmed = finalChunk.trim();
-        if (trimmed) {
-          const speechWrap = appendMessage(currentUserName, trimmed, 'you');
-          addTranslation(speechWrap, trimmed);
-          sendToAI(trimmed);
-        }
+      if (state.mode === 'person' || state.mode === 'ai') {
+        // Show raw text immediately so there's no perceived delay
+        const speechWrap = appendMessage(currentUserName, trimmed, 'you');
+        const bubble = speechWrap.querySelector('.msg-bubble');
+        if (bubble) bubble.style.opacity = '0.6'; // dim while correcting
+
+        // AI corrects the transcript using conversation context
+        const corrected = await correctSTTWithContext(trimmed);
+
+        // Update bubble with corrected text
+        if (bubble) { bubble.textContent = corrected; bubble.style.opacity = ''; }
+
+        addTranslation(speechWrap, corrected);
+
+        if (state.mode === 'person') sendToPeer(corrected);
+        else sendToAI(corrected);
       } else {
         const sep = chatInput.value.trim() ? ' ' : '';
-        chatInput.value = chatInput.value.trim() + sep + finalChunk.trim();
+        chatInput.value = chatInput.value.trim() + sep + trimmed;
         autoResizeInput();
       }
     }
