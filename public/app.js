@@ -430,6 +430,24 @@ function applyRobotPayload(str) {
   } catch { return false; }
 }
 
+// Play an array of emotion frames sequentially on the robot face.
+// Accepts a JSON string that is either an array [...] or a single object {...}.
+let emotionSeqTimer = null;
+function playEmotionSequence(str) {
+  try {
+    const parsed = JSON.parse(str);
+    const frames = Array.isArray(parsed) ? parsed : [parsed];
+    if (emotionSeqTimer) { clearTimeout(emotionSeqTimer); emotionSeqTimer = null; }
+    let i = 0;
+    function step() {
+      if (i >= frames.length) return;
+      applyRobotPayload(JSON.stringify(frames[i++]));
+      emotionSeqTimer = setTimeout(step, 800);
+    }
+    step();
+  } catch {}
+}
+
 // ── MQTT ─────────────────────────────────────────
 function connectMQTT() {
   const url   = settings.mqttUrl || '';
@@ -458,9 +476,13 @@ function connectMQTT() {
     mqttClient.on('connect', () => {
       txt.textContent = url.replace('ws://', '').replace('wss://', '').split('/')[0];
       dot.className = 'mqtt-dot connected';
-      mqttClient.subscribe(topic);
+      mqttClient.subscribe(topic);          // robot/control — joystick / d-pad
+      mqttClient.subscribe('robot/emotion'); // AI emotion sequences
     });
-    mqttClient.on('message', (_t, payload) => { applyRobotPayload(payload.toString()); });
+    mqttClient.on('message', (t, payload) => {
+      if (t === 'robot/emotion') playEmotionSequence(payload.toString());
+      else applyRobotPayload(payload.toString());
+    });
     mqttClient.on('error', (e) => {
       txt.textContent = e.message || 'Error';
       dot.className = 'mqtt-dot error';
