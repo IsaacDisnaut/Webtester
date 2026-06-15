@@ -774,7 +774,7 @@ function toggleSpeech() {
 function speak(text) {
   if (!settings.ttsEnabled || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text.replace(/\{[^}]*\}/g, '').trim());
+  const utt = new SpeechSynthesisUtterance(stripJsonBlocks(text));
   utt.rate = settings.ttsRate || 1;
   const thaiVoice = getThaiVoice(settings.voiceGender);
   if (thaiVoice) { utt.voice = thaiVoice; utt.lang = 'th-TH'; }
@@ -815,7 +815,7 @@ function getThaiVoice(gender = 'male') {
 function speakPeerMessage(text) {
   if (!peerTTSEnabled || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text.replace(/\{[^}]*\}/g, '').trim());
+  const utt = new SpeechSynthesisUtterance(stripJsonBlocks(text));
   const thai = getThaiVoice(settings.voiceGender);
   if (thai) utt.voice = thai;
   utt.rate = 1.0;
@@ -827,7 +827,7 @@ function speakOnDemand(text) {
   if (!window.speechSynthesis) return;
   unlockTTS();
   window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text.replace(/\{[^}]*\}/g, '').trim());
+  const utt = new SpeechSynthesisUtterance(stripJsonBlocks(text));
   const thai = getThaiVoice(settings.voiceGender);
   if (thai) utt.voice = thai;
   utt.rate = 1.0;
@@ -1016,6 +1016,18 @@ function extractJsonBlocks(text) {
   return blocks;
 }
 
+// Remove all {...} blocks (including nested) and collapse extra whitespace.
+function stripJsonBlocks(text) {
+  let result = '';
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{') { depth++; continue; }
+    if (text[i] === '}') { depth--; continue; }
+    if (depth === 0) result += text[i];
+  }
+  return result.replace(/\s+/g, ' ').trim();
+}
+
 function publishEmotion(text) {
   const emotions = [];
   for (const block of extractJsonBlocks(text)) {
@@ -1067,10 +1079,11 @@ async function sendToAI(text) {
       aiHistory.pop();
     } else {
       aiHistory.push({ role: 'assistant', content: data.content });
-      const aiWrap = appendMessage('AI', data.content, 'ai');
-      addTranslation(aiWrap, data.content);
+      const displayText = stripJsonBlocks(data.content);
       publishEmotion(data.content);
-      speak(data.content);
+      const aiWrap = appendMessage('AI', displayText, 'ai');
+      addTranslation(aiWrap, displayText);
+      speak(displayText);
     }
   } catch (err) {
     typing.remove();
