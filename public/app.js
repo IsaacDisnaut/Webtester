@@ -1389,14 +1389,11 @@ function toggleBaseUrlField(provider) {
   const hideUrl = provider === 'anthropic' || provider === 'gemini' || provider === 'groq' || provider === 'openrouter';
   $('field-baseurl').style.display = hideUrl ? 'none' : 'flex';
   const keyField = $('s-apikey');
-  if (provider === 'groq' || provider === 'openrouter') {
-    const serverKey = SERVER_KEYS[provider] || '';
+  const serverKey = SERVER_KEYS[provider] || '';
+  if (serverKey) {
     keyField.value = serverKey;
-    keyField.placeholder = serverKey ? '' : '(uses apikey file on server — leave blank)';
-    keyField.style.opacity = serverKey ? '1' : '0.5';
-  } else if (provider === 'gemini') {
-    keyField.placeholder = '(uses apikey file on server — leave blank)';
-    keyField.style.opacity = '0.5';
+    keyField.placeholder = '';
+    keyField.style.opacity = '1';
   } else {
     keyField.placeholder = 'sk-…';
     keyField.style.opacity = '';

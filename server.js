@@ -52,6 +52,7 @@ try {
   for (const line of raw.split('\n')) {
     const t = line.trim();
     if (!t) continue;
+    // Accumulate JSON model array
     if (jsonBuf !== null) {
       jsonBuf += '\n' + t;
       if (t === ']') {
@@ -64,11 +65,16 @@ try {
       continue;
     }
     if (t === '[') { jsonBuf = '['; continue; }
-    const key = t.includes(':') ? t.slice(t.indexOf(':') + 1).trim() : t;
-    if      (key.startsWith('gsk_'))                          { KEYS.groq       = key; currentProvider = 'groq'; }
-    else if (key.startsWith('sk-or-'))                        { KEYS.openrouter = key; currentProvider = 'openrouter'; }
-    else if (key.startsWith('AIza') || key.startsWith('AQ.')) { KEYS.gemini     = key; currentProvider = 'gemini'; }
-    else if (key.startsWith('sk-ant-'))                       { KEYS.anthropic  = key; currentProvider = 'anthropic'; }
+    // Parse "ProviderName: api-key" — provider name is the source of truth
+    if (t.includes(':')) {
+      const ci = t.indexOf(':');
+      const providerRaw = t.slice(0, ci).trim();
+      const key = t.slice(ci + 1).trim();
+      if (providerRaw && !providerRaw.includes(' ') && key) {
+        currentProvider = providerRaw.toLowerCase();
+        KEYS[currentProvider] = key;
+      }
+    }
   }
 } catch {}
 // Env var fallbacks
@@ -103,7 +109,7 @@ app.get('/api/provider-defaults', (req, res) => {
     baseUrl:   baseUrls[KEY_PROVIDER] || null,
     available:  Object.keys(KEYS),
     modelLists: PROVIDER_MODEL_LISTS,
-    keys:       { groq: KEYS.groq || null, openrouter: KEYS.openrouter || null },
+    keys:       Object.fromEntries(Object.entries(KEYS).map(([k, v]) => [k, v])),
   });
 });
 
