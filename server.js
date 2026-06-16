@@ -55,7 +55,7 @@ try {
     // Accumulate JSON model array
     if (jsonBuf !== null) {
       jsonBuf += '\n' + t;
-      if (t === ']') {
+      if (t.startsWith(']')) {
         try {
           const models = JSON.parse(jsonBuf);
           if (currentProvider && Array.isArray(models)) PROVIDER_MODEL_LISTS[currentProvider] = models;
