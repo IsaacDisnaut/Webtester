@@ -205,6 +205,9 @@ function loadSettings() {
 function persistSettings(s) { localStorage.setItem('vc_settings', JSON.stringify(s)); }
 let settings = loadSettings();
 
+// API keys from server's apikey file (groq/openrouter) — used to auto-fill Settings key field
+let SERVER_KEYS = {};
+
 // Fallback model lists — overwritten by server response if apikey file has arrays
 let PROVIDER_MODELS = {
   groq:       ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it', 'mixtral-8x7b-32768'],
@@ -246,6 +249,7 @@ async function fetchProviderDefaults() {
     const res = await fetch('/api/provider-defaults');
     const d = await res.json();
     if (d.modelLists) Object.assign(PROVIDER_MODELS, d.modelLists);
+    if (d.keys)       Object.assign(SERVER_KEYS, d.keys);
     const hasSaved = !!localStorage.getItem('vc_settings');
     if (hasSaved) return;
     if (!d.provider) return;
@@ -1385,7 +1389,12 @@ function toggleBaseUrlField(provider) {
   const hideUrl = provider === 'anthropic' || provider === 'gemini' || provider === 'groq' || provider === 'openrouter';
   $('field-baseurl').style.display = hideUrl ? 'none' : 'flex';
   const keyField = $('s-apikey');
-  if (provider === 'gemini' || provider === 'groq' || provider === 'openrouter') {
+  if (provider === 'groq' || provider === 'openrouter') {
+    const serverKey = SERVER_KEYS[provider] || '';
+    keyField.value = serverKey;
+    keyField.placeholder = serverKey ? '' : '(uses apikey file on server — leave blank)';
+    keyField.style.opacity = serverKey ? '1' : '0.5';
+  } else if (provider === 'gemini') {
     keyField.placeholder = '(uses apikey file on server — leave blank)';
     keyField.style.opacity = '0.5';
   } else {
