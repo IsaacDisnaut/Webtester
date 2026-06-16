@@ -512,9 +512,9 @@ function publishRobotState() {
   });
   // Primary: WebRTC data channel (direct peer-to-peer, no broker latency)
   sendToPeer(msg);
-  // Also publish to MQTT so deep.py / serial still receives it
+  // Publish to robot/emotion so deep.py and /face both receive it
   if (mqttClient && mqttClient.connected) {
-    mqttClient.publish(settings.mqttTopic || 'robot/control', msg);
+    mqttClient.publish('robot/emotion', msg);
   }
 }
 
