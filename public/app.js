@@ -715,10 +715,18 @@ function initSpeechRecognition() {
         const bubble = speechWrap.querySelector('.msg-bubble');
         if (bubble) bubble.style.opacity = '0.6'; // dim while correcting
 
+        // Show correcting indicator
+        const sttIndicator = document.createElement('div');
+        sttIndicator.className = 'system-msg stt-indicator';
+        sttIndicator.textContent = '✦ Correcting speech…';
+        chatMessages.appendChild(sttIndicator);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
         // AI corrects the transcript using conversation context
         const corrected = await correctSTTWithContext(trimmed);
 
-        // Update bubble with corrected text
+        // Remove indicator and update bubble
+        sttIndicator.remove();
         if (bubble) { bubble.textContent = corrected; bubble.style.opacity = ''; }
 
         addTranslation(speechWrap, corrected);

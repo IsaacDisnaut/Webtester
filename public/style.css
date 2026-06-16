@@ -908,6 +908,16 @@ body {
 .system-msg::before { left: 0; }
 .system-msg::after  { right: 0; }
 
+/* STT correction in-progress indicator */
+.stt-indicator {
+  color: #a78bfa;
+  animation: stt-pulse 1s ease-in-out infinite alternate;
+}
+@keyframes stt-pulse {
+  from { opacity: 0.5; }
+  to   { opacity: 1; }
+}
+
 /* Mobile audio-unlock tap banner */
 .tap-unlock-btn {
   display: block;
