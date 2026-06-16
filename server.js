@@ -40,30 +40,53 @@ app.get('/face', (req, res) => res.sendFile(path.join(__dirname, 'public', 'inde
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ── API key (Groq or Gemini) ─────────────────────────────────
-// Production (Railway): set API_KEY (or GEMINI_API_KEY) environment variable.
-// Local dev: key is read from ../apikey file.
-const API_KEY = (() => {
-  // File wins locally (so apikey file always overrides any stale env vars).
-  // On Railway the file doesn't exist, so env vars are used automatically.
-  try {
-    const k = fs.readFileSync(path.join(__dirname, '..', 'apikey'), 'utf8').trim();
-    if (k) return k;
-  } catch {}
-  return (process.env.API_KEY || process.env.GEMINI_API_KEY || '').trim();
-})();
-const KEY_PROVIDER = API_KEY.startsWith('gsk_') ? 'groq'
-                   : (API_KEY.startsWith('AIza') || API_KEY.startsWith('AQ.')) ? 'gemini' : '';
-const KEY_MODEL    = KEY_PROVIDER === 'groq' ? 'llama-3.3-70b-versatile' : 'gemini-2.0-flash';
-if (API_KEY) console.log(`API key loaded (${KEY_PROVIDER || 'unknown provider'}).`);
-else         console.warn('No API key — set API_KEY env var (Railway) or create ../apikey file (local).');
+// ── API keys — supports "Provider: key" multi-line format ────
+// Each line: "Groq: gsk_..." / "Openrouter: sk-or-..." / "Gemini: AIza..." / bare key also works.
+// Production (Railway): set GROQ_API_KEY / OPENROUTER_API_KEY / GEMINI_API_KEY env vars.
+const KEYS = {};
+try {
+  const raw = fs.readFileSync(path.join(__dirname, '..', 'apikey'), 'utf8');
+  for (const line of raw.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    const key = t.includes(':') ? t.slice(t.indexOf(':') + 1).trim() : t;
+    if      (key.startsWith('gsk_'))                          KEYS.groq        = key;
+    else if (key.startsWith('sk-or-'))                        KEYS.openrouter  = key;
+    else if (key.startsWith('AIza') || key.startsWith('AQ.')) KEYS.gemini      = key;
+    else if (key.startsWith('sk-ant-'))                       KEYS.anthropic   = key;
+  }
+} catch {}
+// Env var fallbacks
+if (!KEYS.groq       && process.env.GROQ_API_KEY)       KEYS.groq       = process.env.GROQ_API_KEY;
+if (!KEYS.openrouter && process.env.OPENROUTER_API_KEY) KEYS.openrouter = process.env.OPENROUTER_API_KEY;
+if (!KEYS.gemini     && process.env.GEMINI_API_KEY)     KEYS.gemini     = process.env.GEMINI_API_KEY;
+// Legacy single API_KEY env var
+const _leg = (process.env.API_KEY || '').trim();
+if (_leg.startsWith('gsk_')   && !KEYS.groq)       KEYS.groq       = _leg;
+if (_leg.startsWith('sk-or-') && !KEYS.openrouter) KEYS.openrouter = _leg;
+if ((_leg.startsWith('AIza') || _leg.startsWith('AQ.')) && !KEYS.gemini) KEYS.gemini = _leg;
+
+// Backward-compat aliases used by older code below
+const API_KEY      = KEYS.groq || KEYS.openrouter || KEYS.gemini || '';
+const KEY_PROVIDER = KEYS.groq ? 'groq' : KEYS.openrouter ? 'openrouter' : KEYS.gemini ? 'gemini' : '';
+const KEY_MODEL    = KEY_PROVIDER === 'groq'       ? 'llama-3.3-70b-versatile'
+                   : KEY_PROVIDER === 'openrouter' ? 'qwen/qwen-2.5-72b-instruct'
+                   : 'gemini-2.0-flash';
+
+if (Object.keys(KEYS).length) console.log(`API keys loaded: ${Object.keys(KEYS).join(', ')}`);
+else console.warn('No API key — set env vars (Railway) or create ../apikey file (local).');
 
 // ── Provider defaults (lets frontend know which provider/model is pre-configured) ──
 app.get('/api/provider-defaults', (req, res) => {
+  const baseUrls = {
+    groq:       'https://api.groq.com/openai/v1',
+    openrouter: 'https://openrouter.ai/api/v1',
+  };
   res.json({
-    provider: KEY_PROVIDER || null,
-    model:    KEY_MODEL,
-    baseUrl:  KEY_PROVIDER === 'groq' ? 'https://api.groq.com/openai/v1' : null,
+    provider:  KEY_PROVIDER || null,
+    model:     KEY_MODEL,
+    baseUrl:   baseUrls[KEY_PROVIDER] || null,
+    available: Object.keys(KEYS),
   });
 });
 
@@ -75,11 +98,13 @@ app.post('/api/translate', async (req, res) => {
   const prompt = `Translate the following text. If it is Thai, translate to English. If it is English, translate to Thai. Output ONLY the translation, no explanation.\n\n${text}`;
   try {
     let translated;
-    if (KEY_PROVIDER === 'groq') {
-      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    if (KEY_PROVIDER === 'groq' || KEY_PROVIDER === 'openrouter') {
+      const url   = KEY_PROVIDER === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://openrouter.ai/api/v1/chat/completions';
+      const model = KEY_PROVIDER === 'groq' ? 'llama-3.3-70b-versatile' : 'qwen/qwen-2.5-72b-instruct';
+      const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
-        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: prompt }], temperature: 0.1 }),
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.1 }),
       });
       if (!r.ok) return res.status(r.status).json({ error: await r.text() });
       translated = (await r.json()).choices[0].message.content.trim();
@@ -122,12 +147,14 @@ app.post('/api/stt-correct', async (req, res) => {
 
   try {
     let corrected = text;
-    if (KEY_PROVIDER === 'groq') {
-      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    if (KEY_PROVIDER === 'groq' || KEY_PROVIDER === 'openrouter') {
+      const url   = KEY_PROVIDER === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://openrouter.ai/api/v1/chat/completions';
+      const model = KEY_PROVIDER === 'groq' ? 'llama-3.3-70b-versatile' : 'qwen/qwen-2.5-72b-instruct';
+      const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.1,
           max_tokens: 256,
@@ -160,7 +187,7 @@ app.post('/api/ai', async (req, res) => {
   try {
     let text;
     if (provider === 'groq') {
-      const key = (API_KEY.startsWith('gsk_') ? API_KEY : null) || apiKey;
+      const key = KEYS.groq || apiKey;
       if (!key) return res.status(503).json({ error: 'Groq API key not configured — add apikey file or enter key in Settings' });
       const allMsgs = [
         ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
@@ -171,6 +198,21 @@ app.post('/api/ai', async (req, res) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
         body: JSON.stringify({ model: groqModel, messages: allMsgs }),
+      });
+      if (!r.ok) return res.status(r.status).json({ error: await r.text() });
+      text = (await r.json()).choices[0].message.content;
+    } else if (provider === 'openrouter') {
+      const key = KEYS.openrouter || apiKey;
+      if (!key) return res.status(503).json({ error: 'OpenRouter API key not configured — add apikey file or enter key in Settings' });
+      const allMsgs = [
+        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+        ...messages,
+      ];
+      const orModel = model || 'qwen/qwen-2.5-72b-instruct';
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model: orModel, messages: allMsgs }),
       });
       if (!r.ok) return res.status(r.status).json({ error: await r.text() });
       text = (await r.json()).choices[0].message.content;

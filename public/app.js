@@ -1367,10 +1367,10 @@ function readSettingsForm() {
 }
 
 function toggleBaseUrlField(provider) {
-  const hideUrl = provider === 'anthropic' || provider === 'gemini' || provider === 'groq';
+  const hideUrl = provider === 'anthropic' || provider === 'gemini' || provider === 'groq' || provider === 'openrouter';
   $('field-baseurl').style.display = hideUrl ? 'none' : 'flex';
   const keyField = $('s-apikey');
-  if (provider === 'gemini' || provider === 'groq') {
+  if (provider === 'gemini' || provider === 'groq' || provider === 'openrouter') {
     keyField.placeholder = '(uses apikey file on server — leave blank)';
     keyField.style.opacity = '0.5';
   } else {
@@ -1380,10 +1380,11 @@ function toggleBaseUrlField(provider) {
   // Replace model with a sensible default when switching providers
   const modelInput = $('s-model');
   const cur = modelInput.value;
-  if (provider === 'groq'      && !cur.startsWith('llama') && !cur.startsWith('mixtral') && !cur.startsWith('gemma')) modelInput.value = 'llama-3.3-70b-versatile';
-  if (provider === 'gemini'    && !cur.startsWith('gemini-'))                                                         modelInput.value = 'gemini-2.0-flash';
-  if (provider === 'anthropic' && !cur.startsWith('claude-'))                                                         modelInput.value = 'claude-sonnet-4-6';
-  if (provider === 'openai'    && (cur.startsWith('gemini-') || cur.startsWith('claude-') || cur.startsWith('llama'))) modelInput.value = 'gpt-4o-mini';
+  if (provider === 'groq'       && !cur.startsWith('llama') && !cur.startsWith('mixtral') && !cur.startsWith('gemma'))          modelInput.value = 'llama-3.3-70b-versatile';
+  if (provider === 'openrouter' && !cur.startsWith('qwen')  && !cur.startsWith('meta-llama') && !cur.startsWith('mistralai'))    modelInput.value = 'qwen/qwen-2.5-72b-instruct';
+  if (provider === 'gemini'     && !cur.startsWith('gemini-'))                                                                    modelInput.value = 'gemini-2.0-flash';
+  if (provider === 'anthropic'  && !cur.startsWith('claude-'))                                                                    modelInput.value = 'claude-sonnet-4-6';
+  if (provider === 'openai'     && (cur.startsWith('gemini-') || cur.startsWith('claude-') || cur.startsWith('llama') || cur.startsWith('qwen'))) modelInput.value = 'gpt-4o-mini';
 }
 
 function openSettingsModal()  { populateSettingsForm(); settingsOverlay.classList.add('open'); }
