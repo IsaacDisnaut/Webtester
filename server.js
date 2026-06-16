@@ -44,16 +44,31 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Each line: "Groq: gsk_..." / "Openrouter: sk-or-..." / "Gemini: AIza..." / bare key also works.
 // Production (Railway): set GROQ_API_KEY / OPENROUTER_API_KEY / GEMINI_API_KEY env vars.
 const KEYS = {};
+const PROVIDER_MODEL_LISTS = {};
 try {
   const raw = fs.readFileSync(path.join(__dirname, '..', 'apikey'), 'utf8');
+  let currentProvider = null;
+  let jsonBuf = null;
   for (const line of raw.split('\n')) {
     const t = line.trim();
     if (!t) continue;
+    if (jsonBuf !== null) {
+      jsonBuf += '\n' + t;
+      if (t === ']') {
+        try {
+          const models = JSON.parse(jsonBuf);
+          if (currentProvider && Array.isArray(models)) PROVIDER_MODEL_LISTS[currentProvider] = models;
+        } catch {}
+        jsonBuf = null;
+      }
+      continue;
+    }
+    if (t === '[') { jsonBuf = '['; continue; }
     const key = t.includes(':') ? t.slice(t.indexOf(':') + 1).trim() : t;
-    if      (key.startsWith('gsk_'))                          KEYS.groq        = key;
-    else if (key.startsWith('sk-or-'))                        KEYS.openrouter  = key;
-    else if (key.startsWith('AIza') || key.startsWith('AQ.')) KEYS.gemini      = key;
-    else if (key.startsWith('sk-ant-'))                       KEYS.anthropic   = key;
+    if      (key.startsWith('gsk_'))                          { KEYS.groq       = key; currentProvider = 'groq'; }
+    else if (key.startsWith('sk-or-'))                        { KEYS.openrouter = key; currentProvider = 'openrouter'; }
+    else if (key.startsWith('AIza') || key.startsWith('AQ.')) { KEYS.gemini     = key; currentProvider = 'gemini'; }
+    else if (key.startsWith('sk-ant-'))                       { KEYS.anthropic  = key; currentProvider = 'anthropic'; }
   }
 } catch {}
 // Env var fallbacks
@@ -86,7 +101,8 @@ app.get('/api/provider-defaults', (req, res) => {
     provider:  KEY_PROVIDER || null,
     model:     KEY_MODEL,
     baseUrl:   baseUrls[KEY_PROVIDER] || null,
-    available: Object.keys(KEYS),
+    available:  Object.keys(KEYS),
+    modelLists: PROVIDER_MODEL_LISTS,
   });
 });
 

@@ -205,6 +205,12 @@ function loadSettings() {
 function persistSettings(s) { localStorage.setItem('vc_settings', JSON.stringify(s)); }
 let settings = loadSettings();
 
+// Fallback model lists — overwritten by server response if apikey file has arrays
+let PROVIDER_MODELS = {
+  groq:       ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it', 'mixtral-8x7b-32768'],
+  openrouter: ['qwen/qwen-2.5-72b-instruct', 'meta-llama/llama-3.3-70b-instruct:free', 'deepseek/deepseek-chat', 'deepseek/deepseek-r1'],
+};
+
 // ════════════════════════════════════════════════
 //  DOM
 // ════════════════════════════════════════════════
@@ -237,10 +243,11 @@ const settingsOverlay  = $('settings-overlay');
 // Load provider/model defaults from server (uses apikey file) only on first visit (no saved settings)
 async function fetchProviderDefaults() {
   try {
-    const hasSaved = !!localStorage.getItem('vc_settings');
-    if (hasSaved) return; // user has explicit settings — don't override
     const res = await fetch('/api/provider-defaults');
     const d = await res.json();
+    if (d.modelLists) Object.assign(PROVIDER_MODELS, d.modelLists);
+    const hasSaved = !!localStorage.getItem('vc_settings');
+    if (hasSaved) return;
     if (!d.provider) return;
     settings.provider = d.provider;
     settings.model    = d.model    || settings.model;
@@ -1361,7 +1368,7 @@ function readSettingsForm() {
     provider:     $('s-provider').value,
     baseUrl:      $('s-baseurl').value || DEFAULT_SETTINGS.baseUrl,
     apiKey:       $('s-apikey').value,
-    model:        $('s-model').value   || DEFAULT_SETTINGS.model,
+    model:        ($('s-model-select').style.display !== 'none' ? $('s-model-select').value : $('s-model').value) || DEFAULT_SETTINGS.model,
     systemPrompt: $('s-system').value  || DEFAULT_SETTINGS.systemPrompt,
     ttsEnabled:   $('s-tts').checked,
     ttsRate:      parseFloat($('s-rate').value),
@@ -1385,14 +1392,25 @@ function toggleBaseUrlField(provider) {
     keyField.placeholder = 'sk-…';
     keyField.style.opacity = '';
   }
-  // Replace model with a sensible default when switching providers
-  const modelInput = $('s-model');
-  const cur = modelInput.value;
-  if (provider === 'groq'       && !cur.startsWith('llama') && !cur.startsWith('mixtral') && !cur.startsWith('gemma'))          modelInput.value = 'llama-3.3-70b-versatile';
-  if (provider === 'openrouter' && !cur.startsWith('qwen')  && !cur.startsWith('meta-llama') && !cur.startsWith('mistralai'))    modelInput.value = 'qwen/qwen-2.5-72b-instruct';
-  if (provider === 'gemini'     && !cur.startsWith('gemini-'))                                                                    modelInput.value = 'gemini-2.0-flash';
-  if (provider === 'anthropic'  && !cur.startsWith('claude-'))                                                                    modelInput.value = 'claude-sonnet-4-6';
-  if (provider === 'openai'     && (cur.startsWith('gemini-') || cur.startsWith('claude-') || cur.startsWith('llama') || cur.startsWith('qwen'))) modelInput.value = 'gpt-4o-mini';
+
+  const modelSelect = $('s-model-select');
+  const modelInput  = $('s-model');
+  const models = PROVIDER_MODELS[provider];
+  if (models && models.length) {
+    modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+    const cur = modelInput.value;
+    modelSelect.value = models.includes(cur) ? cur : models[0];
+    modelInput.value  = modelSelect.value;
+    modelSelect.style.display = '';
+    modelInput.style.display  = 'none';
+  } else {
+    modelSelect.style.display = 'none';
+    modelInput.style.display  = '';
+    const cur = modelInput.value;
+    if (provider === 'gemini'    && !cur.startsWith('gemini-'))  modelInput.value = 'gemini-2.0-flash';
+    if (provider === 'anthropic' && !cur.startsWith('claude-'))  modelInput.value = 'claude-sonnet-4-6';
+    if (provider === 'openai'    && (cur.startsWith('gemini-') || cur.startsWith('claude-') || cur.startsWith('llama') || cur.startsWith('qwen'))) modelInput.value = 'gpt-4o-mini';
+  }
 }
 
 function openSettingsModal()  { populateSettingsForm(); settingsOverlay.classList.add('open'); }
@@ -1452,6 +1470,7 @@ function bindEventListeners() {
   });
 
   $('s-provider').addEventListener('change', (e) => toggleBaseUrlField(e.target.value));
+  $('s-model-select').addEventListener('change', (e) => { $('s-model').value = e.target.value; });
   $('s-rate').addEventListener('input', (e) => {
     $('rate-val').textContent = parseFloat(e.target.value).toFixed(1);
   });
