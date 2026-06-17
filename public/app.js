@@ -1031,10 +1031,10 @@ async function sendMessage() {
   const youWrap = appendMessage(currentUserName, text, 'you');
   addTranslation(youWrap, text);
 
-  if (state.mode === 'ai') {
-    await sendToAI(text);
-  } else {
+  if (state.mode === 'person') {
     sendToPeer(text);
+  } else {
+    await sendToAI(text);
   }
 }
 
