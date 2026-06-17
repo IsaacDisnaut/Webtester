@@ -212,6 +212,7 @@ let SERVER_KEYS = {};
 let PROVIDER_MODELS = {
   groq:       ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it', 'mixtral-8x7b-32768'],
   openrouter: ['qwen/qwen-2.5-72b-instruct', 'meta-llama/llama-3.3-70b-instruct:free', 'deepseek/deepseek-chat', 'deepseek/deepseek-r1'],
+  '9arm':     ['qwen3.6-35b-a3b'],
 };
 
 // ════════════════════════════════════════════════
