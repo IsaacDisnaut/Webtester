@@ -81,7 +81,7 @@ try {
 if (!KEYS.groq       && process.env.GROQ_API_KEY)       KEYS.groq       = process.env.GROQ_API_KEY;
 if (!KEYS.openrouter && process.env.OPENROUTER_API_KEY) KEYS.openrouter = process.env.OPENROUTER_API_KEY;
 if (!KEYS.gemini     && process.env.GEMINI_API_KEY)     KEYS.gemini     = process.env.GEMINI_API_KEY;
-if (!KEYS['9arm']    && process.env['9ARM_KEY'])        KEYS['9arm']    = process.env['9ARM_KEY'];
+if (!KEYS['9arm']    && (process.env['9ARM_KEY'] || process.env.NINEARM_KEY)) KEYS['9arm'] = process.env['9ARM_KEY'] || process.env.NINEARM_KEY;
 // Legacy single API_KEY env var
 const _leg = (process.env.API_KEY || '').trim();
 if (_leg.startsWith('gsk_')   && !KEYS.groq)       KEYS.groq       = _leg;
@@ -89,10 +89,11 @@ if (_leg.startsWith('sk-or-') && !KEYS.openrouter) KEYS.openrouter = _leg;
 if ((_leg.startsWith('AIza') || _leg.startsWith('AQ.')) && !KEYS.gemini) KEYS.gemini = _leg;
 
 // Backward-compat aliases used by older code below
-const API_KEY      = KEYS.groq || KEYS.openrouter || KEYS.gemini || '';
-const KEY_PROVIDER = KEYS.groq ? 'groq' : KEYS.openrouter ? 'openrouter' : KEYS.gemini ? 'gemini' : '';
+const API_KEY      = KEYS.groq || KEYS.openrouter || KEYS.gemini || KEYS['9arm'] || '';
+const KEY_PROVIDER = KEYS.groq ? 'groq' : KEYS.openrouter ? 'openrouter' : KEYS.gemini ? 'gemini' : KEYS['9arm'] ? '9arm' : '';
 const KEY_MODEL    = KEY_PROVIDER === 'groq'       ? 'llama-3.3-70b-versatile'
                    : KEY_PROVIDER === 'openrouter' ? 'qwen/qwen-2.5-72b-instruct'
+                   : KEY_PROVIDER === '9arm'       ? 'qwen3.6-35b-a3b'
                    : 'gemini-2.0-flash';
 
 if (Object.keys(KEYS).length) console.log(`API keys loaded: ${Object.keys(KEYS).join(', ')}`);
