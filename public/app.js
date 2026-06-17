@@ -1386,7 +1386,7 @@ function readSettingsForm() {
 }
 
 function toggleBaseUrlField(provider) {
-  const hideUrl = provider === 'anthropic' || provider === 'gemini' || provider === 'groq' || provider === 'openrouter';
+  const hideUrl = provider === 'anthropic' || provider === 'gemini' || provider === 'groq' || provider === 'openrouter' || provider === '9arm';
   $('field-baseurl').style.display = hideUrl ? 'none' : 'flex';
   const keyField = $('s-apikey');
   const serverKey = SERVER_KEYS[provider] || '';

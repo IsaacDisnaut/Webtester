@@ -81,6 +81,7 @@ try {
 if (!KEYS.groq       && process.env.GROQ_API_KEY)       KEYS.groq       = process.env.GROQ_API_KEY;
 if (!KEYS.openrouter && process.env.OPENROUTER_API_KEY) KEYS.openrouter = process.env.OPENROUTER_API_KEY;
 if (!KEYS.gemini     && process.env.GEMINI_API_KEY)     KEYS.gemini     = process.env.GEMINI_API_KEY;
+if (!KEYS['9arm']    && process.env['9ARM_KEY'])        KEYS['9arm']    = process.env['9ARM_KEY'];
 // Legacy single API_KEY env var
 const _leg = (process.env.API_KEY || '').trim();
 if (_leg.startsWith('gsk_')   && !KEYS.groq)       KEYS.groq       = _leg;
@@ -102,6 +103,7 @@ app.get('/api/provider-defaults', (req, res) => {
   const baseUrls = {
     groq:       'https://api.groq.com/openai/v1',
     openrouter: 'https://openrouter.ai/api/v1',
+    '9arm':     'https://gateway.9arm.co/v1',
   };
   res.json({
     provider:  KEY_PROVIDER || null,
@@ -276,6 +278,20 @@ app.post('/api/ai', async (req, res) => {
       });
       if (!r.ok) return res.status(r.status).json({ error: await r.text() });
       text = (await r.json()).content[0].text;
+    } else if (provider === '9arm') {
+      const key = KEYS['9arm'] || apiKey;
+      if (!key) return res.status(503).json({ error: '9Arm API key not configured — add apikey file or set 9ARM_KEY env var' });
+      const allMsgs = [
+        ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+        ...messages,
+      ];
+      const r = await fetch('https://gateway.9arm.co/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model: model || 'qwen3.6-35b-a3b', messages: allMsgs }),
+      });
+      if (!r.ok) return res.status(r.status).json({ error: await r.text() });
+      text = (await r.json()).choices[0].message.content;
     } else {
       const base = (baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
       const allMsgs = [
