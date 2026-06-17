@@ -177,6 +177,7 @@ const DEFAULT_SETTINGS = {
   apiKey: '',
   model: 'llama-3.3-70b-versatile',
   systemPrompt: 'You are a male Thai robot. You mainly speak Thai as your native language. You can move your face left-right, move both eyes, and open/close your mouth. In EVERY response include one emotion JSON anywhere in your message using EXACTLY this format: {"Head":45,"Mouth":30,"Analog":{"x":0,"y":0}}\nRanges: Head 20-100 (20=look left,45=center, 100=look right), Mouth 30-100 (30=closed, 100=open/smile), Analog x -1 to 1 (eye pan), y -1 to 1 (eye tilt). Choose values that match your emotion.',
+  sttCorrection: true,
   ttsEnabled: true,
   ttsRate: 1.0,
   voiceGender: 'male',
@@ -718,24 +719,23 @@ function initSpeechRecognition() {
       if (!trimmed) return;
 
       if (state.mode === 'person' || state.mode === 'ai') {
-        // Show raw text immediately so there's no perceived delay
         const speechWrap = appendMessage(currentUserName, trimmed, 'you');
         const bubble = speechWrap.querySelector('.msg-bubble');
-        if (bubble) bubble.style.opacity = '0.6'; // dim while correcting
+        let corrected = trimmed;
 
-        // Show correcting indicator
-        const sttIndicator = document.createElement('div');
-        sttIndicator.className = 'system-msg stt-indicator';
-        sttIndicator.textContent = '✦ Correcting speech…';
-        chatMessages.appendChild(sttIndicator);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        if (settings.sttCorrection) {
+          if (bubble) bubble.style.opacity = '0.6';
+          const sttIndicator = document.createElement('div');
+          sttIndicator.className = 'system-msg stt-indicator';
+          sttIndicator.textContent = '✦ Correcting speech…';
+          chatMessages.appendChild(sttIndicator);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
 
-        // AI corrects the transcript using conversation context
-        const corrected = await correctSTTWithContext(trimmed);
+          corrected = await correctSTTWithContext(trimmed);
 
-        // Remove indicator and update bubble
-        sttIndicator.remove();
-        if (bubble) { bubble.textContent = corrected; bubble.style.opacity = ''; }
+          sttIndicator.remove();
+          if (bubble) { bubble.textContent = corrected; bubble.style.opacity = ''; }
+        }
 
         addTranslation(speechWrap, corrected);
 
@@ -1352,6 +1352,7 @@ function populateSettingsForm() {
   $('s-apikey').value    = settings.apiKey;
   $('s-model').value     = settings.model;
   $('s-system').value    = settings.systemPrompt;
+  $('s-stt-correct').checked = settings.sttCorrection;
   $('s-tts').checked     = settings.ttsEnabled;
   $('s-rate').value      = settings.ttsRate;
   $('rate-val').textContent = settings.ttsRate;
@@ -1371,6 +1372,7 @@ function readSettingsForm() {
     apiKey:       $('s-apikey').value,
     model:        ($('s-model-select').style.display !== 'none' ? $('s-model-select').value : $('s-model').value) || DEFAULT_SETTINGS.model,
     systemPrompt: $('s-system').value  || DEFAULT_SETTINGS.systemPrompt,
+    sttCorrection: $('s-stt-correct').checked,
     ttsEnabled:   $('s-tts').checked,
     ttsRate:      parseFloat($('s-rate').value),
     voiceGender:  $('s-voice-gender').value,
