@@ -1396,6 +1396,7 @@ function toggleBaseUrlField(provider) {
     keyField.placeholder = '';
     keyField.style.opacity = '1';
   } else {
+    keyField.value = '';
     keyField.placeholder = 'sk-…';
     keyField.style.opacity = '';
   }
