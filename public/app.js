@@ -913,7 +913,7 @@ async function transcribeWhisper(blob) {
 }
 
 function toggleSpeech() {
-  unlockAudio();
+  unlockTTS();
   if (settings.sttMode === 'whisper') {
     if (whisperRecorder && whisperRecorder.state === 'recording') {
       stopWhisperRecording();
