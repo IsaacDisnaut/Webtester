@@ -177,6 +177,7 @@ const DEFAULT_SETTINGS = {
   apiKey: '',
   model: 'llama-3.3-70b-versatile',
   systemPrompt: 'You are a male Thai robot. You mainly speak Thai as your native language. You can move your face left-right, move both eyes, and open/close your mouth. In EVERY response include emotion JSON blocks to animate your face, placed anywhere in your message, using EXACTLY this format: {"Head":45,"Mouth":30,"Analog":{"x":0,"y":0}}\nRanges: Head 20-100 (20=look left,45=center, 100=look right), Mouth 30-100 (30=closed, 100=open/smile), Analog x -1 to 1 (eye pan), y -1 to 1 (eye tilt). Include as many frames as needed to make the animation feel natural (e.g. approach → peak → settle).',
+  sttMode: 'whisper',
   sttCorrection: true,
   ttsEnabled: true,
   ttsRate: 1.0,
@@ -831,8 +832,97 @@ function disableSpeech() {
   }
 }
 
+// ── Whisper push-to-talk ─────────────────────────────────────
+let whisperRecorder  = null;
+let whisperChunks    = [];
+let whisperMimeType  = '';
+
+async function startWhisperRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    whisperMimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+    whisperChunks = [];
+    whisperRecorder = new MediaRecorder(stream, whisperMimeType ? { mimeType: whisperMimeType } : {});
+    whisperRecorder.ondataavailable = e => { if (e.data.size > 0) whisperChunks.push(e.data); };
+    whisperRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(whisperChunks, { type: whisperMimeType || 'audio/webm' });
+      whisperChunks = [];
+      await transcribeWhisper(blob);
+    };
+    whisperRecorder.start();
+    speechBtn.classList.add('active-speech');
+    speechIndicator.style.display = 'flex';
+    console.log('[Whisper] recording started');
+  } catch (err) {
+    console.error('[Whisper] mic error:', err);
+    showSystemMsg('Microphone access denied.');
+  }
+}
+
+function stopWhisperRecording() {
+  if (whisperRecorder && whisperRecorder.state !== 'inactive') {
+    whisperRecorder.stop();
+    whisperRecorder = null;
+  }
+  speechBtn.classList.remove('active-speech');
+  speechIndicator.style.display = 'none';
+}
+
+async function transcribeWhisper(blob) {
+  console.log('[Whisper] sending', blob.size, 'bytes to server');
+  const indicator = document.createElement('div');
+  indicator.className = 'system-msg stt-indicator';
+  indicator.textContent = '✦ Transcribing…';
+  chatMessages.appendChild(indicator);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  try {
+    const r = await fetch('/api/stt', {
+      method: 'POST',
+      headers: { 'Content-Type': blob.type, 'X-Mime-Type': blob.type },
+      body: blob,
+    });
+    indicator.remove();
+    if (!r.ok) { console.error('[Whisper] server error', r.status); return; }
+    const { text } = await r.json();
+    const trimmed = (text || '').trim();
+    if (!trimmed) { console.log('[Whisper] empty transcript'); return; }
+    console.log('[Whisper] transcript:', trimmed);
+
+    const speechWrap = appendMessage(currentUserName, trimmed, 'you');
+    const bubble = speechWrap.querySelector('.msg-bubble');
+    let corrected = trimmed;
+    if (settings.sttCorrection) {
+      if (bubble) bubble.style.opacity = '0.6';
+      const corrInd = document.createElement('div');
+      corrInd.className = 'system-msg stt-indicator';
+      corrInd.textContent = '✦ Correcting speech…';
+      chatMessages.appendChild(corrInd);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      corrected = await correctSTTWithContext(trimmed);
+      corrInd.remove();
+      if (bubble) { bubble.textContent = corrected; bubble.style.opacity = ''; }
+    }
+    addTranslation(speechWrap, corrected);
+    if (state.mode === 'person') sendToPeer(corrected);
+    else sendToAI(corrected);
+  } catch (err) {
+    indicator.remove();
+    console.error('[Whisper] error:', err);
+  }
+}
+
 function toggleSpeech() {
-  state.speechOn ? disableSpeech() : enableSpeech();
+  unlockAudio();
+  if (settings.sttMode === 'whisper') {
+    if (whisperRecorder && whisperRecorder.state === 'recording') {
+      stopWhisperRecording();
+    } else {
+      startWhisperRecording();
+    }
+  } else {
+    state.speechOn ? disableSpeech() : enableSpeech();
+  }
 }
 
 // ════════════════════════════════════════════════
@@ -1381,6 +1471,7 @@ function populateSettingsForm() {
   $('s-apikey').value    = settings.apiKey;
   $('s-model').value     = settings.model;
   $('s-system').value    = settings.systemPrompt;
+  $('s-stt-mode').value      = settings.sttMode || 'whisper';
   $('s-stt-correct').checked = settings.sttCorrection;
   $('s-tts').checked     = settings.ttsEnabled;
   $('s-rate').value      = settings.ttsRate;
@@ -1401,6 +1492,7 @@ function readSettingsForm() {
     apiKey:       $('s-apikey').value,
     model:        ($('s-model-select').style.display !== 'none' ? $('s-model-select').value : $('s-model').value) || DEFAULT_SETTINGS.model,
     systemPrompt: $('s-system').value  || DEFAULT_SETTINGS.systemPrompt,
+    sttMode:      $('s-stt-mode').value,
     sttCorrection: $('s-stt-correct').checked,
     ttsEnabled:   $('s-tts').checked,
     ttsRate:      parseFloat($('s-rate').value),

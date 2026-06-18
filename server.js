@@ -155,6 +155,31 @@ app.post('/api/translate', async (req, res) => {
   }
 });
 
+// ── Whisper STT ─────────────────────────────────────────────
+app.post('/api/stt', express.raw({ type: '*/*', limit: '25mb' }), async (req, res) => {
+  const key = KEYS.groq;
+  if (!key) return res.status(503).json({ error: 'Groq API key not configured' });
+  const mimeType = req.headers['x-mime-type'] || 'audio/webm';
+  const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
+  try {
+    const formData = new FormData();
+    formData.append('file', new File([req.body], `audio.${ext}`, { type: mimeType }));
+    formData.append('model', 'whisper-large-v3-turbo');
+    formData.append('language', 'th');
+    formData.append('response_format', 'json');
+    const r = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}` },
+      body: formData,
+    });
+    if (!r.ok) return res.status(r.status).json({ error: await r.text() });
+    const data = await r.json();
+    res.json({ text: data.text || '' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── STT context correction ───────────────────────────────────
 // Given a raw speech-to-text chunk and recent conversation messages, returns a corrected string.
 // Uses the server-side API key; falls back to the raw text on any error so callers never fail.

@@ -338,6 +338,14 @@
           <textarea id="s-system" rows="3" placeholder="You are a helpful assistant."></textarea>
         </label>
 
+        <label class="field">
+          <span>Speech-to-Text Mode</span>
+          <select id="s-stt-mode">
+            <option value="whisper">Whisper (Groq) — push-to-talk, reliable</option>
+            <option value="browser">Browser STT — continuous, needs Google</option>
+          </select>
+        </label>
+
         <label class="field row">
           <span>AI Speech Correction (STT)</span>
           <input id="s-stt-correct" type="checkbox" />
