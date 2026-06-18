@@ -781,8 +781,11 @@ function initSpeechRecognition() {
     } else if (e.error === 'audio-capture') {
       showSystemMsg('Cannot access microphone — it may be in use by another app.');
       disableSpeech();
+    } else if (e.error === 'network') {
+      // Back off faster on network errors to avoid hammering the service
+      restartDelay = Math.min(Math.max(restartDelay, 500) * 2, 8000);
+      console.warn('[STT] network error — next restart in', restartDelay, 'ms');
     }
-    // network / no-speech / aborted — transient, onend handles restart
   };
 
   recognition.onend = () => {
@@ -792,8 +795,8 @@ function initSpeechRecognition() {
       if (!state.speechOn) return;
       try { recognition.start(); console.log('[STT] restarted'); } catch (err) { console.warn('[STT] restart failed:', err); }
     }, restartDelay);
-    // Increase delay after each failed session; cap at 4 s
-    restartDelay = Math.min(restartDelay * 1.5, 4000);
+    // Increase delay after each failed session; start from 300 ms minimum so multiplication works
+    restartDelay = restartDelay < 300 ? 300 : Math.min(restartDelay * 1.5, 8000);
   };
 }
 
