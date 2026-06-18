@@ -840,27 +840,48 @@ let whisperMimeType  = '';
 async function startWhisperRecording() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    whisperMimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+    const tracks = stream.getAudioTracks();
+    console.log('[Whisper] mic tracks:', tracks.map(t => `${t.label} enabled=${t.enabled} muted=${t.muted}`));
+
+    const candidates = ['audio/webm;codecs=opus','audio/webm','audio/ogg','audio/mp4'];
+    whisperMimeType = candidates.find(t => MediaRecorder.isTypeSupported(t)) || '';
+    console.log('[Whisper] supported mime types check:', candidates.map(t => `${t}:${MediaRecorder.isTypeSupported(t)}`));
+    console.log('[Whisper] selected mime type:', whisperMimeType || '(browser default)');
+
     whisperChunks = [];
     whisperRecorder = new MediaRecorder(stream, whisperMimeType ? { mimeType: whisperMimeType } : {});
-    whisperRecorder.ondataavailable = e => { if (e.data.size > 0) whisperChunks.push(e.data); };
+    console.log('[Whisper] recorder mimeType:', whisperRecorder.mimeType, 'state:', whisperRecorder.state);
+
+    whisperRecorder.ondataavailable = e => {
+      console.log('[Whisper] data chunk:', e.data.size, 'bytes');
+      if (e.data.size > 0) whisperChunks.push(e.data);
+    };
+    whisperRecorder.onerror = e => console.error('[Whisper] recorder error:', e.error);
     whisperRecorder.onstop = async () => {
+      console.log('[Whisper] recorder stopped, chunks:', whisperChunks.length, 'total bytes:', whisperChunks.reduce((s, c) => s + c.size, 0));
       stream.getTracks().forEach(t => t.stop());
       const blob = new Blob(whisperChunks, { type: whisperMimeType || 'audio/webm' });
       whisperChunks = [];
+      console.log('[Whisper] blob size:', blob.size, 'type:', blob.type);
+      if (blob.size < 1000) {
+        console.warn('[Whisper] blob too small — microphone may not have captured audio');
+        showSystemMsg('No audio captured — check microphone permissions.');
+        return;
+      }
       await transcribeWhisper(blob);
     };
-    whisperRecorder.start();
+    whisperRecorder.start(500); // collect chunks every 500ms for progress visibility
     speechBtn.classList.add('active-speech');
     speechIndicator.style.display = 'flex';
     console.log('[Whisper] recording started');
   } catch (err) {
-    console.error('[Whisper] mic error:', err);
-    showSystemMsg('Microphone access denied.');
+    console.error('[Whisper] mic error:', err.name, err.message);
+    showSystemMsg(`Microphone error: ${err.message}`);
   }
 }
 
 function stopWhisperRecording() {
+  console.log('[Whisper] stop requested, recorder state:', whisperRecorder?.state);
   if (whisperRecorder && whisperRecorder.state !== 'inactive') {
     whisperRecorder.stop();
     whisperRecorder = null;
@@ -870,7 +891,7 @@ function stopWhisperRecording() {
 }
 
 async function transcribeWhisper(blob) {
-  console.log('[Whisper] sending', blob.size, 'bytes to server');
+  console.log('[Whisper] sending', blob.size, 'bytes, type:', blob.type);
   const indicator = document.createElement('div');
   indicator.className = 'system-msg stt-indicator';
   indicator.textContent = '✦ Transcribing…';
@@ -882,9 +903,12 @@ async function transcribeWhisper(blob) {
       headers: { 'Content-Type': blob.type, 'X-Mime-Type': blob.type },
       body: blob,
     });
+    const responseText = await r.text();
+    console.log('[Whisper] server response', r.status, ':', responseText);
     indicator.remove();
-    if (!r.ok) { console.error('[Whisper] server error', r.status); return; }
-    const { text } = await r.json();
+    if (!r.ok) { console.error('[Whisper] server error', r.status, responseText); showSystemMsg(`Whisper error: ${r.status}`); return; }
+    const { text, error } = JSON.parse(responseText);
+    if (error) { console.error('[Whisper] API error:', error); showSystemMsg(`Whisper API error: ${error}`); return; }
     const trimmed = (text || '').trim();
     if (!trimmed) { console.log('[Whisper] empty transcript'); return; }
     console.log('[Whisper] transcript:', trimmed);
