@@ -415,9 +415,8 @@ function updateRobotModel() {
   // Analog X → eye pan (both eyes, limit ±0.349 rad)
   rv.setJoint('i01.head.eyeLeft.001_link_joint',  robotState.analogX * 0.349);
   rv.setJoint('i01.head.eyeRight.001_link_joint', robotState.analogX * 0.349);
-  // Analog Y → eye tilt (limit ±0.349 rad) — positive Y = look up
-  rv.setJoint('i01.head.eyeLeft_link_joint',  robotState.analogY * 0.349);
-  rv.setJoint('i01.head.eyeRight_link_joint', robotState.analogY * 0.349);
+  rv.setJoint('i01.head.eyeLeft_link_joint',  -robotState.analogY * 0.349);
+  rv.setJoint('i01.head.eyeRight_link_joint', -robotState.analogY * 0.349);
 }
 
 // Keep old name as alias so any remaining callers don't break
