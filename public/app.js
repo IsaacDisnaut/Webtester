@@ -832,12 +832,18 @@ function disableSpeech() {
   }
 }
 
-// ── Whisper push-to-talk ─────────────────────────────────────
+// ── Whisper STT with silence detection ───────────────────────
 let whisperRecorder  = null;
 let whisperChunks    = [];
 let whisperMimeType  = '';
+let whisperAudioCtx  = null;
+
+const SILENCE_THRESHOLD = 0.015; // RMS level below which counts as silence
+const SILENCE_DELAY_MS  = 1500;  // ms of silence before auto-stop
+const MIN_RECORD_MS     = 500;   // don't auto-stop before this many ms
 
 async function startWhisperRecording() {
+  if (whisperRecorder) return; // already recording
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     const tracks = stream.getAudioTracks();
@@ -845,20 +851,21 @@ async function startWhisperRecording() {
 
     const candidates = ['audio/webm;codecs=opus','audio/webm','audio/ogg','audio/mp4'];
     whisperMimeType = candidates.find(t => MediaRecorder.isTypeSupported(t)) || '';
-    console.log('[Whisper] supported mime types check:', candidates.map(t => `${t}:${MediaRecorder.isTypeSupported(t)}`));
-    console.log('[Whisper] selected mime type:', whisperMimeType || '(browser default)');
+    console.log('[Whisper] mime types:', candidates.map(t => `${t}:${MediaRecorder.isTypeSupported(t)}`));
+    console.log('[Whisper] selected:', whisperMimeType || '(browser default)');
 
     whisperChunks = [];
     whisperRecorder = new MediaRecorder(stream, whisperMimeType ? { mimeType: whisperMimeType } : {});
-    console.log('[Whisper] recorder mimeType:', whisperRecorder.mimeType, 'state:', whisperRecorder.state);
+    console.log('[Whisper] recorder mimeType:', whisperRecorder.mimeType);
 
     whisperRecorder.ondataavailable = e => {
-      console.log('[Whisper] data chunk:', e.data.size, 'bytes');
+      console.log('[Whisper] chunk:', e.data.size, 'bytes');
       if (e.data.size > 0) whisperChunks.push(e.data);
     };
     whisperRecorder.onerror = e => console.error('[Whisper] recorder error:', e.error);
     whisperRecorder.onstop = async () => {
-      console.log('[Whisper] recorder stopped, chunks:', whisperChunks.length, 'total bytes:', whisperChunks.reduce((s, c) => s + c.size, 0));
+      console.log('[Whisper] stopped — chunks:', whisperChunks.length, 'bytes:', whisperChunks.reduce((s, c) => s + c.size, 0));
+      if (whisperAudioCtx) { whisperAudioCtx.close(); whisperAudioCtx = null; }
       stream.getTracks().forEach(t => t.stop());
       const blob = new Blob(whisperChunks, { type: whisperMimeType || 'audio/webm' });
       whisperChunks = [];
@@ -870,10 +877,40 @@ async function startWhisperRecording() {
       }
       await transcribeWhisper(blob);
     };
-    whisperRecorder.start(500); // collect chunks every 500ms for progress visibility
+    whisperRecorder.start(300);
+
+    // ── Silence detection via Web Audio API ──────────────────
+    whisperAudioCtx = new AudioContext();
+    const analyser  = whisperAudioCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    whisperAudioCtx.createMediaStreamSource(stream).connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+    let silenceStart = null;
+    const startedAt  = Date.now();
+
+    const checkSilence = () => {
+      if (!whisperRecorder || whisperRecorder.state === 'inactive') return;
+      analyser.getFloatTimeDomainData(buf);
+      const rms = Math.sqrt(buf.reduce((s, v) => s + v * v, 0) / buf.length);
+      if (rms < SILENCE_THRESHOLD) {
+        if (!silenceStart) silenceStart = Date.now();
+        const elapsed = Date.now() - startedAt;
+        const silent  = Date.now() - silenceStart;
+        if (elapsed > MIN_RECORD_MS && silent > SILENCE_DELAY_MS) {
+          console.log('[Whisper] silence detected after', elapsed, 'ms — auto-stopping');
+          stopWhisperRecording();
+          return;
+        }
+      } else {
+        silenceStart = null;
+      }
+      requestAnimationFrame(checkSilence);
+    };
+    requestAnimationFrame(checkSilence);
+
     speechBtn.classList.add('active-speech');
     speechIndicator.style.display = 'flex';
-    console.log('[Whisper] recording started');
+    console.log('[Whisper] recording started — will auto-stop on silence');
   } catch (err) {
     console.error('[Whisper] mic error:', err.name, err.message);
     showSystemMsg(`Microphone error: ${err.message}`);
@@ -881,11 +918,11 @@ async function startWhisperRecording() {
 }
 
 function stopWhisperRecording() {
-  console.log('[Whisper] stop requested, recorder state:', whisperRecorder?.state);
+  console.log('[Whisper] stop, recorder state:', whisperRecorder?.state);
   if (whisperRecorder && whisperRecorder.state !== 'inactive') {
     whisperRecorder.stop();
-    whisperRecorder = null;
   }
+  whisperRecorder = null;
   speechBtn.classList.remove('active-speech');
   speechIndicator.style.display = 'none';
 }
