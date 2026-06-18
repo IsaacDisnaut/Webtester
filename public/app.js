@@ -415,9 +415,9 @@ function updateRobotModel() {
   // Analog X → eye pan (both eyes, limit ±0.349 rad)
   rv.setJoint('i01.head.eyeLeft.001_link_joint',  robotState.analogX * 0.349);
   rv.setJoint('i01.head.eyeRight.001_link_joint', robotState.analogX * 0.349);
-  // Analog Y → eye tilt (limit ±0.349 rad) — negated so positive Y = look up
-  rv.setJoint('i01.head.eyeLeft_link_joint',  -robotState.analogY * 0.349);
-  rv.setJoint('i01.head.eyeRight_link_joint', -robotState.analogY * 0.349);
+  // Analog Y → eye tilt (limit ±0.349 rad) — positive Y = look up
+  rv.setJoint('i01.head.eyeLeft_link_joint',  robotState.analogY * 0.349);
+  rv.setJoint('i01.head.eyeRight_link_joint', robotState.analogY * 0.349);
 }
 
 // Keep old name as alias so any remaining callers don't break
@@ -547,7 +547,7 @@ function initJoystick() {
     thumb.style.transform     = `translate(${dx}px,${dy}px)`;
     thumb.classList.add('active');
     robotState.analogX = +(dx / c.maxR).toFixed(3);
-    robotState.analogY = +(dy / c.maxR).toFixed(3);
+    robotState.analogY = +(-dy / c.maxR).toFixed(3);
     publishRobotState();
   }
 
@@ -572,8 +572,8 @@ function initJoystick() {
 // ── D-pad ─────────────────────────────────────────
 function applyDPad() {
   switch (robotState.padDir) {
-    case 'left':  robotState.headAngle = Math.max(robotState.headAngle - 3, -35); break;
-    case 'right': robotState.headAngle = Math.min(robotState.headAngle + 3,  35); break;
+    case 'left':  robotState.headAngle = Math.min(robotState.headAngle + 3,  35); break;
+    case 'right': robotState.headAngle = Math.max(robotState.headAngle - 3, -35); break;
     case 'up':    robotState.mouthOpen = Math.max(robotState.mouthOpen - 0.10,  0); break;
     case 'down':  robotState.mouthOpen = Math.min(robotState.mouthOpen + 0.10,  1); break;
   }
