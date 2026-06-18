@@ -833,10 +833,11 @@ function disableSpeech() {
 }
 
 // ── Whisper STT with silence detection ───────────────────────
-let whisperRecorder  = null;
-let whisperChunks    = [];
-let whisperMimeType  = '';
-let whisperAudioCtx  = null;
+let whisperRecorder    = null;
+let whisperChunks      = [];
+let whisperMimeType    = '';
+let whisperAudioCtx    = null;
+let whisperContinuous  = false;
 
 const SILENCE_THRESHOLD = 0.015; // RMS level below which counts as silence
 const SILENCE_DELAY_MS  = 1500;  // ms of silence before auto-stop
@@ -923,8 +924,21 @@ function stopWhisperRecording() {
     whisperRecorder.stop();
   }
   whisperRecorder = null;
-  speechBtn.classList.remove('active-speech');
-  speechIndicator.style.display = 'none';
+  // In continuous mode keep the button/indicator active (we'll restart after transcription)
+  if (!whisperContinuous) {
+    speechBtn.classList.remove('active-speech');
+    speechIndicator.style.display = 'none';
+  }
+}
+
+// After TTS finishes speaking, restart Whisper recording (continuous mode)
+function restartWhisperAfterTTS() {
+  if (!whisperContinuous) return;
+  if (window.speechSynthesis && window.speechSynthesis.speaking) {
+    setTimeout(restartWhisperAfterTTS, 300);
+  } else {
+    setTimeout(() => { if (whisperContinuous) startWhisperRecording(); }, 400);
+  }
 }
 
 async function transcribeWhisper(blob) {
@@ -971,14 +985,26 @@ async function transcribeWhisper(blob) {
     indicator.remove();
     console.error('[Whisper] error:', err);
   }
+  // Continuous mode: wait for TTS to finish then listen again
+  if (whisperContinuous) restartWhisperAfterTTS();
 }
 
 function toggleSpeech() {
   unlockTTS();
   if (settings.sttMode === 'whisper') {
-    if (whisperRecorder && whisperRecorder.state === 'recording') {
+    if (whisperContinuous) {
+      // Turn continuous mode OFF
+      whisperContinuous = false;
       stopWhisperRecording();
+      speechBtn.classList.remove('active-speech');
+      speechIndicator.style.display = 'none';
+      showSystemMsg('Speech OFF.');
     } else {
+      // Turn continuous mode ON
+      whisperContinuous = true;
+      speechBtn.classList.add('active-speech');
+      speechIndicator.style.display = 'flex';
+      showSystemMsg('Speech ON — listening continuously, will stop on silence…');
       startWhisperRecording();
     }
   } else {
