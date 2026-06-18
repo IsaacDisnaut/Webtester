@@ -356,24 +356,32 @@ function applyMode(mode) {
   const remoteWrap = $('remote-wrap');
   const localWrap  = $('local-wrap');
 
+  const controlsRow = document.querySelector('.robot-controls-row');
+
   if (mode === 'robot') {
-    // Show robot panel; hide video elements. WebRTC is NOT touched.
     robotPanel.style.display = 'flex';
+    if (controlsRow) controlsRow.style.display = '';
     remoteWrap.style.display = 'none';
     localWrap.style.display  = 'none';
-    // Keep room-bar if already in a room so the user can see connection state
     roomBar.style.display = currentRoomId ? 'block' : 'none';
     if (recognition) recognition.lang = 'th-TH';
     initRobotPanel();
+  } else if (mode === 'ai') {
+    robotPanel.style.display = 'flex';
+    if (controlsRow) controlsRow.style.display = 'none';
+    remoteWrap.style.display = 'none';
+    localWrap.style.display  = 'none';
+    initRobotPanel();
   } else {
     robotPanel.style.display = 'none';
+    if (controlsRow) controlsRow.style.display = '';
     remoteWrap.style.display = '';
     localWrap.style.display  = '';
   }
 
   if (mode === 'ai') {
     roomBar.style.display = 'none';
-    aiAvatar.style.display = 'flex';
+    aiAvatar.style.display = 'none';
     remoteVideo.classList.remove('active');
     remoteName.textContent = 'AI Assistant';
     if (recognition) recognition.lang = 'th-TH';
