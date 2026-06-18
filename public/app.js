@@ -659,6 +659,7 @@ function initRobotPanel() {
 // can fix Thai homophones / garbled words using context. Falls back to raw
 // text on any failure so the conversation never stalls.
 async function correctSTTWithContext(rawText) {
+  console.log('[STT] raw transcript:', rawText);
   try {
     const contextMessages = state.mode === 'ai' ? aiHistory.slice(-6) : [];
     const res = await fetch('/api/stt-correct', {
@@ -666,10 +667,20 @@ async function correctSTTWithContext(rawText) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: rawText, messages: contextMessages }),
     });
-    if (!res.ok) return rawText;
+    if (!res.ok) {
+      console.warn('[STT] correction request failed:', res.status, res.statusText);
+      return rawText;
+    }
     const { corrected } = await res.json();
-    return (corrected && corrected.trim()) ? corrected.trim() : rawText;
-  } catch {
+    const result = (corrected && corrected.trim()) ? corrected.trim() : rawText;
+    if (result !== rawText) {
+      console.log('[STT] corrected:', result);
+    } else {
+      console.log('[STT] no change after correction');
+    }
+    return result;
+  } catch (err) {
+    console.error('[STT] correction error:', err);
     return rawText;
   }
 }
@@ -725,12 +736,15 @@ function initSpeechRecognition() {
       const trimmed = finalChunk.trim();
       if (!trimmed) return;
 
+      console.log('[STT] final chunk:', trimmed);
+
       if (state.mode === 'person' || state.mode === 'ai') {
         const speechWrap = appendMessage(currentUserName, trimmed, 'you');
         const bubble = speechWrap.querySelector('.msg-bubble');
         let corrected = trimmed;
 
         if (settings.sttCorrection) {
+          console.log('[STT] sending to AI correction…');
           if (bubble) bubble.style.opacity = '0.6';
           const sttIndicator = document.createElement('div');
           sttIndicator.className = 'system-msg stt-indicator';
@@ -742,8 +756,11 @@ function initSpeechRecognition() {
 
           sttIndicator.remove();
           if (bubble) { bubble.textContent = corrected; bubble.style.opacity = ''; }
+        } else {
+          console.log('[STT] correction disabled — using raw text');
         }
 
+        console.log('[STT] sending to AI:', corrected);
         addTranslation(speechWrap, corrected);
 
         if (state.mode === 'person') sendToPeer(corrected);
@@ -757,6 +774,7 @@ function initSpeechRecognition() {
   };
 
   recognition.onerror = (e) => {
+    console.warn('[STT] error:', e.error);
     if (['not-allowed', 'service-not-allowed'].includes(e.error)) {
       showSystemMsg('Microphone access denied. Allow microphone in browser settings.');
       disableSpeech();
@@ -768,10 +786,11 @@ function initSpeechRecognition() {
   };
 
   recognition.onend = () => {
+    console.log('[STT] session ended — speechOn:', state.speechOn, 'restartDelay:', restartDelay);
     if (!state.speechOn) return;
     setTimeout(() => {
       if (!state.speechOn) return;
-      try { recognition.start(); } catch {}
+      try { recognition.start(); console.log('[STT] restarted'); } catch (err) { console.warn('[STT] restart failed:', err); }
     }, restartDelay);
     // Increase delay after each failed session; cap at 4 s
     restartDelay = Math.min(restartDelay * 1.5, 4000);
