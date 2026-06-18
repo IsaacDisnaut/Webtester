@@ -949,11 +949,13 @@ async function transcribeWhisper(blob) {
   chatMessages.appendChild(indicator);
   chatMessages.scrollTop = chatMessages.scrollHeight;
   try {
+    const sttStart = Date.now();
     const r = await fetch('/api/stt', {
       method: 'POST',
       headers: { 'Content-Type': blob.type, 'X-Mime-Type': blob.type },
       body: blob,
     });
+    const sttMs = Date.now() - sttStart;
     const responseText = await r.text();
     console.log('[Whisper] server response', r.status, ':', responseText);
     indicator.remove();
@@ -967,6 +969,7 @@ async function transcribeWhisper(blob) {
     const speechWrap = appendMessage(currentUserName, trimmed, 'you');
     const bubble = speechWrap.querySelector('.msg-bubble');
     let corrected = trimmed;
+    let corrMs = null;
     if (settings.sttCorrection) {
       if (bubble) bubble.style.opacity = '0.6';
       const corrInd = document.createElement('div');
@@ -974,10 +977,15 @@ async function transcribeWhisper(blob) {
       corrInd.textContent = '✦ Correcting speech…';
       chatMessages.appendChild(corrInd);
       chatMessages.scrollTop = chatMessages.scrollHeight;
+      const corrStart = Date.now();
       corrected = await correctSTTWithContext(trimmed);
+      corrMs = Date.now() - corrStart;
       corrInd.remove();
       if (bubble) { bubble.textContent = corrected; bubble.style.opacity = ''; }
     }
+    const timingParts = [['STT', sttMs]];
+    if (corrMs !== null) timingParts.push(['correction', corrMs]);
+    showTimingLog(timingParts);
     addTranslation(speechWrap, corrected);
     if (state.mode === 'person') sendToPeer(corrected);
     else sendToAI(corrected);
@@ -1206,6 +1214,15 @@ function showSystemMsg(text) {
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+function showTimingLog(parts) {
+  const el = document.createElement('div');
+  el.className = 'system-msg timing-log';
+  el.textContent = '⏱ ' + parts.map(([label, ms]) => `${label} ${(ms / 1000).toFixed(2)}s`).join(' · ');
+  chatMessages.appendChild(el);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  console.log('[Timing]', Object.fromEntries(parts.map(([l, ms]) => [l, `${(ms/1000).toFixed(2)}s`])));
+}
+
 // Mobile browsers (especially iOS) block TTS until a user gesture occurs.
 // This shows a tappable banner that unlocks the audio context on tap.
 function showTapToUnlockAudio() {
@@ -1303,6 +1320,7 @@ async function sendToAI(text) {
   const typing = showTypingIndicator();
 
   try {
+    const aiStart = Date.now();
     const res = await fetch('/api/ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1316,6 +1334,7 @@ async function sendToAI(text) {
       }),
     });
     const data = await res.json();
+    const aiMs = Date.now() - aiStart;
     typing.remove();
 
     if (data.error) {
@@ -1326,6 +1345,7 @@ async function sendToAI(text) {
       const displayText = stripJsonBlocks(data.content);
       publishEmotion(data.content);
       const aiWrap = appendMessage('AI', displayText, 'ai');
+      showTimingLog([['AI reply', aiMs]]);
       addTranslation(aiWrap, displayText);
       speak(displayText);
     }
