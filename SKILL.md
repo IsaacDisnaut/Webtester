@@ -2,7 +2,7 @@
 
 ## Overview
 
-The VideoCall AI assistant is a Thai-first conversational chatbot powered by **Groq + Llama 3.3 70B** (default). It is designed for natural Thai-language dialogue with speech recognition, AI response, and text-to-speech output all tuned for Thai.
+The VideoCall AI assistant is a Thai-first conversational chatbot powered by **9Arm-Qwen3** (default). It is designed for natural Thai-language dialogue with speech recognition, AI response, and text-to-speech output all tuned for Thai.
 
 ---
 
@@ -10,11 +10,11 @@ The VideoCall AI assistant is a Thai-first conversational chatbot powered by **G
 
 | Setting | Value |
 |---------|-------|
-| Provider | Groq |
-| Model | `llama-3.3-70b-versatile` |
+| Provider | 9Arm-Qwen3(uses apikey file) |
+| Model | `qwen3.6-35b-a3b` |
 | Language | Thai (ภาษาไทย) first |
 
-The provider is locked to Groq+Llama on first visit. Users can change it in **Settings** (⚙️) after that.
+The provider is locked to 9Arm-Qwen3 on first visit. Users can change it in **Settings** (⚙️) after that.
 
 ---
 
@@ -43,7 +43,7 @@ POST /api/stt-correct          ← AI context correction step
    ▼
 Chat bubble (updated in-place)
    │
-   ├─── AI mode  → POST /api/ai  → Llama response → TTS
+   ├─── AI mode  → POST /api/ai  → AI response → TTS
    └─── Person   → WebRTC data channel / Socket relay
 ```
 

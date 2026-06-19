@@ -4,7 +4,11 @@
       "Bash(node server.js)",
       "Bash(Start-Sleep -Seconds 2)",
       "Bash(Invoke-WebRequest -Uri \"http://localhost:3000\" -UseBasicParsing)",
-      "Bash(Select-Object -ExpandProperty StatusCode)"
+      "Bash(Select-Object -ExpandProperty StatusCode)",
+      "Bash(git push *)",
+      "PowerShell(Get-ChildItem \"d:\\\\CODING\\\\DeepdarkFamtasy\\\\meshes\" | Where-Object { $_.Name -match \"eye\" } | Select-Object Name)",
+      "Bash(npm start *)",
+      "Bash(git pull *)"
     ]
   }
 }
