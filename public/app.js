@@ -1616,13 +1616,10 @@ function toggleBaseUrlField(provider) {
   const hideUrl = provider === 'anthropic' || provider === 'gemini' || provider === 'groq' || provider === 'openrouter' || provider === '9arm';
   $('field-baseurl').style.display = hideUrl ? 'none' : 'flex';
   const keyField = $('s-apikey');
-  const serverKey = SERVER_KEYS[provider] || '';
-  if (serverKey) {
-    keyField.value = serverKey;
-    keyField.placeholder = '';
-    keyField.style.opacity = '1';
-  } else {
-    keyField.value = '';
+  const hasServerKey = !!SERVER_KEYS[provider];
+  $('field-apikey').style.display = hasServerKey ? 'none' : '';
+  if (!hasServerKey) {
+    keyField.value = settings.apiKey || '';
     keyField.placeholder = 'sk-…';
     keyField.style.opacity = '';
   }
