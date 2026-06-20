@@ -59,7 +59,7 @@ def play_emotion_sequence(payload_str):
 
 
 # ── MQTT ─────────────────────────────────────────────────────
-def on_connect(client, userdata, flags, reason_code, properties=None):
+def on_connect(client, _userdata, _flags, reason_code, _properties=None):
     print(f"MQTT connected (code {reason_code})")
     client.subscribe(EMOTION_TOPIC)
     print(f"Subscribed to {EMOTION_TOPIC}")
