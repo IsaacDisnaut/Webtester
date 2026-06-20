@@ -6,3 +6,4 @@ videocall.db-wal
 .env
 *.log
 apikey
+tempCodeRunnerFile.py

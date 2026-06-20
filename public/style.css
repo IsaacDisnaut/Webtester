@@ -908,6 +908,13 @@ body {
 .system-msg::before { left: 0; }
 .system-msg::after  { right: 0; }
 
+.timing-log {
+  font-family: monospace;
+  font-size: 0.7rem;
+  opacity: 0.45;
+  letter-spacing: 0.01em;
+}
+
 /* STT correction in-progress indicator */
 .stt-indicator {
   color: #a78bfa;

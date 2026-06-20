@@ -955,8 +955,8 @@ async function transcribeWhisper(blob) {
       headers: { 'Content-Type': blob.type, 'X-Mime-Type': blob.type },
       body: blob,
     });
-    const sttMs = Date.now() - sttStart;
     const responseText = await r.text();
+    const sttMs = Date.now() - sttStart;
     console.log('[Whisper] server response', r.status, ':', responseText);
     indicator.remove();
     if (!r.ok) { console.error('[Whisper] server error', r.status, responseText); showSystemMsg(`Whisper error: ${r.status}`); return; }
@@ -1622,6 +1622,8 @@ function toggleBaseUrlField(provider) {
     keyField.value = settings.apiKey || '';
     keyField.placeholder = 'sk-…';
     keyField.style.opacity = '';
+    keyField.type = 'password';
+    $('toggle-key-btn').textContent = 'Show';
   }
 
   const modelSelect = $('s-model-select');

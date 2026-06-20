@@ -110,7 +110,6 @@ app.get('/api/provider-defaults', (req, res) => {
     provider:  KEY_PROVIDER || null,
     model:     KEY_MODEL,
     baseUrl:   baseUrls[KEY_PROVIDER] || null,
-    available:  Object.keys(KEYS),
     modelLists: PROVIDER_MODEL_LISTS,
     keys:       Object.fromEntries(Object.entries(KEYS).map(([k]) => [k, true])),
   });
