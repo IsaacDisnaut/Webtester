@@ -7,3 +7,4 @@ videocall.db-wal
 *.log
 apikey
 tempCodeRunnerFile.py
+__pycache__/
