@@ -1605,6 +1605,9 @@ function toggleBaseUrlField(provider) {
 function openSettingsModal()  { populateSettingsForm(); settingsOverlay.classList.add('open'); }
 function closeSettingsModal() { settingsOverlay.classList.remove('open'); }
 
+function openHelpModal()  { $('help-overlay').classList.add('open'); }
+function closeHelpModal() { $('help-overlay').classList.remove('open'); }
+
 // ════════════════════════════════════════════════
 //  INPUT HELPERS
 // ════════════════════════════════════════════════
@@ -1642,6 +1645,11 @@ function bindEventListeners() {
       setTimeout(() => (copyCodeBtn.textContent = 'Copy'), 1500);
     });
   });
+
+  $('help-btn').addEventListener('click', openHelpModal);
+  $('help-close-btn').addEventListener('click', closeHelpModal);
+  $('help-got-it-btn').addEventListener('click', closeHelpModal);
+  $('help-overlay').addEventListener('click', (e) => { if (e.target === $('help-overlay')) closeHelpModal(); });
 
   $('settings-open-btn').addEventListener('click', openSettingsModal);
   $('settings-close-btn').addEventListener('click', closeSettingsModal);

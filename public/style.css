@@ -233,15 +233,74 @@ body {
   z-index: 10;
 }
 
-.logo {
+.help-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-right: 8px;
+  transition: background .18s, color .18s;
+  line-height: 1;
+}
+.help-btn:hover {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* Help modal overrides */
+.help-modal { max-width: 560px; }
+.help-body { display: flex; flex-direction: column; gap: 0; }
+
+.help-section {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.help-section:last-child { border-bottom: none; }
+
+.help-section-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: 1.05rem;
+  gap: 7px;
+  font-weight: 600;
+  font-size: .9rem;
+  color: var(--text);
+  margin-bottom: 7px;
+}
+.help-section-title svg { color: var(--primary); flex-shrink: 0; }
+
+.help-section p {
+  font-size: .82rem;
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin: 0 0 6px;
+}
+.help-section p:last-child { margin-bottom: 0; }
+
+.help-list {
+  margin: 4px 0 0 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+.help-list li {
+  font-size: .82rem;
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin-bottom: 4px;
+}
+.help-list li:last-child { margin-bottom: 0; }
+.help-list code {
+  font-family: monospace;
+  font-size: .8rem;
+  background: rgba(108,99,255,.15);
+  padding: 1px 5px;
+  border-radius: 4px;
   color: var(--primary);
-  letter-spacing: -.3px;
-  margin-right: 8px;
 }
 
 .mode-nav {
