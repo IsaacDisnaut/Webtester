@@ -140,58 +140,6 @@ app.post('/api/stt', express.raw({ type: '*/*', limit: '25mb' }), async (req, re
   }
 });
 
-// ── STT context correction ───────────────────────────────────
-// Given a raw speech-to-text chunk and recent conversation messages, returns a corrected string.
-// Uses the server-side API key; falls back to the raw text on any error so callers never fail.
-app.post('/api/stt-correct', async (req, res) => {
-  const { text, messages } = req.body;
-  if (!text) return res.json({ corrected: text || '' });
-  if (!API_KEY) return res.json({ corrected: text });
-
-  const recentCtx = (messages || []).slice(-6).map(m =>
-    `${m.role === 'assistant' ? 'AI' : 'ผู้ใช้'}: ${m.content}`
-  ).join('\n');
-
-  const prompt = recentCtx
-    ? `บทสนทนาล่าสุด:\n${recentCtx}\n\nข้อความที่รับรู้จากเสียง (อาจมีข้อผิดพลาด): "${text}"\n\nแก้ไขข้อความโดยอิงบริบทบทสนทนา ตอบเฉพาะข้อความที่แก้ไขแล้ว ไม่ต้องอธิบาย`
-    : `แก้ไขข้อผิดพลาดในข้อความที่รับรู้จากเสียงภาษาไทย: "${text}"\nตอบเฉพาะข้อความที่แก้ไขแล้ว ไม่ต้องอธิบาย`;
-
-  try {
-    let corrected = text;
-    if (KEY_PROVIDER === 'groq' || KEY_PROVIDER === 'openrouter') {
-      const url   = KEY_PROVIDER === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://openrouter.ai/api/v1/chat/completions';
-      const model = KEY_PROVIDER === 'groq' ? 'llama-3.3-70b-versatile' : 'qwen/qwen-2.5-72b-instruct';
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.1,
-          max_tokens: 256,
-        }),
-      });
-      if (r.ok) corrected = (await r.json()).choices[0].message.content.trim();
-    } else if (KEY_PROVIDER === 'gemini') {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 256, temperature: 0.1 },
-          }),
-        }
-      );
-      if (r.ok) corrected = (await r.json()).candidates?.[0]?.content?.parts?.[0]?.text?.trim() || text;
-    }
-    res.json({ corrected });
-  } catch {
-    res.json({ corrected: text });
-  }
-});
-
 // ── AI proxy ────────────────────────────────────────────────
 app.post('/api/ai', async (req, res) => {
   const { provider, baseUrl, apiKey, model, messages, systemPrompt } = req.body;

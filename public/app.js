@@ -177,7 +177,6 @@ const DEFAULT_SETTINGS = {
   model: 'llama-3.3-70b-versatile',
   systemPrompt: 'You are a male Thai robot. You mainly speak Thai as your native language. You can move your face left-right, move both eyes, and open/close your mouth. In EVERY response include emotion JSON blocks to animate your face, placed anywhere in your message, using EXACTLY this format: {"Head":45,"Mouth":30,"Analog":{"x":0,"y":0}}\nRanges: Head 20-100 (20=look left,45=center, 100=look right), Mouth 30-100 (30=closed, 100=open/smile), Analog x -1 to 1 (eye pan), y -1 to 1 (eye tilt). Include as many frames as needed to make the animation feel natural (e.g. approach → peak → settle).',
   sttMode: 'whisper',
-  sttCorrection: true,
   ttsEnabled: true,
   ttsRate: 1.0,
   voiceGender: 'male',
@@ -653,39 +652,6 @@ function initRobotPanel() {
 }
 
 // ════════════════════════════════════════════════
-//  STT CONTEXT CORRECTION
-// ════════════════════════════════════════════════
-// Sends the raw transcript + recent conversation to the server so the model
-// can fix Thai homophones / garbled words using context. Falls back to raw
-// text on any failure so the conversation never stalls.
-async function correctSTTWithContext(rawText) {
-  console.log('[STT] raw transcript:', rawText);
-  try {
-    const contextMessages = state.mode === 'ai' ? aiHistory.slice(-6) : [];
-    const res = await fetch('/api/stt-correct', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: rawText, messages: contextMessages }),
-    });
-    if (!res.ok) {
-      console.warn('[STT] correction request failed:', res.status, res.statusText);
-      return rawText;
-    }
-    const { corrected } = await res.json();
-    const result = (corrected && corrected.trim()) ? corrected.trim() : rawText;
-    if (result !== rawText) {
-      console.log('[STT] corrected:', result);
-    } else {
-      console.log('[STT] no change after correction');
-    }
-    return result;
-  } catch (err) {
-    console.error('[STT] correction error:', err);
-    return rawText;
-  }
-}
-
-// ════════════════════════════════════════════════
 //  SPEECH RECOGNITION
 // ════════════════════════════════════════════════
 function initSpeechRecognition() {
@@ -740,30 +706,11 @@ function initSpeechRecognition() {
 
       if (state.mode === 'person' || state.mode === 'ai') {
         const speechWrap = appendMessage(currentUserName, trimmed, 'you');
-        const bubble = speechWrap.querySelector('.msg-bubble');
-        let corrected = trimmed;
 
-        if (settings.sttCorrection) {
-          console.log('[STT] sending to AI correction…');
-          if (bubble) bubble.style.opacity = '0.6';
-          const sttIndicator = document.createElement('div');
-          sttIndicator.className = 'system-msg stt-indicator';
-          sttIndicator.textContent = '✦ Correcting speech…';
-          chatMessages.appendChild(sttIndicator);
-          chatMessages.scrollTop = chatMessages.scrollHeight;
+        console.log('[STT] sending to AI:', trimmed);
 
-          corrected = await correctSTTWithContext(trimmed);
-
-          sttIndicator.remove();
-          if (bubble) { bubble.textContent = corrected; bubble.style.opacity = ''; }
-        } else {
-          console.log('[STT] correction disabled — using raw text');
-        }
-
-        console.log('[STT] sending to AI:', corrected);
-
-        if (state.mode === 'person') sendToPeer(corrected);
-        else sendToAI(corrected);
+        if (state.mode === 'person') sendToPeer(trimmed);
+        else sendToAI(trimmed);
       } else {
         const sep = chatInput.value.trim() ? ' ' : '';
         chatInput.value = chatInput.value.trim() + sep + trimmed;
@@ -964,28 +911,10 @@ async function transcribeWhisper(blob) {
     if (!trimmed) { console.log('[Whisper] empty transcript'); return; }
     console.log('[Whisper] transcript:', trimmed);
 
-    const speechWrap = appendMessage(currentUserName, trimmed, 'you');
-    const bubble = speechWrap.querySelector('.msg-bubble');
-    let corrected = trimmed;
-    let corrMs = null;
-    if (settings.sttCorrection) {
-      if (bubble) bubble.style.opacity = '0.6';
-      const corrInd = document.createElement('div');
-      corrInd.className = 'system-msg stt-indicator';
-      corrInd.textContent = '✦ Correcting speech…';
-      chatMessages.appendChild(corrInd);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-      const corrStart = Date.now();
-      corrected = await correctSTTWithContext(trimmed);
-      corrMs = Date.now() - corrStart;
-      corrInd.remove();
-      if (bubble) { bubble.textContent = corrected; bubble.style.opacity = ''; }
-    }
-    const timingParts = [['STT', sttMs]];
-    if (corrMs !== null) timingParts.push(['correction', corrMs]);
-    showTimingLog(timingParts);
-    if (state.mode === 'person') sendToPeer(corrected);
-    else sendToAI(corrected);
+    appendMessage(currentUserName, trimmed, 'you');
+    showTimingLog([['STT', sttMs]]);
+    if (state.mode === 'person') sendToPeer(trimmed);
+    else sendToAI(trimmed);
   } catch (err) {
     indicator.remove();
     console.error('[Whisper] error:', err);
@@ -1535,7 +1464,6 @@ function populateSettingsForm() {
   $('s-model').value     = settings.model;
   $('s-system').value    = settings.systemPrompt;
   $('s-stt-mode').value      = settings.sttMode || 'whisper';
-  $('s-stt-correct').checked = settings.sttCorrection;
   $('s-tts').checked     = settings.ttsEnabled;
   $('s-rate').value      = settings.ttsRate;
   $('rate-val').textContent = settings.ttsRate;
@@ -1556,7 +1484,6 @@ function readSettingsForm() {
     model:        ($('s-model-select').style.display !== 'none' ? $('s-model-select').value : $('s-model').value) || DEFAULT_SETTINGS.model,
     systemPrompt: $('s-system').value  || DEFAULT_SETTINGS.systemPrompt,
     sttMode:      $('s-stt-mode').value,
-    sttCorrection: $('s-stt-correct').checked,
     ttsEnabled:   $('s-tts').checked,
     ttsRate:      parseFloat($('s-rate').value),
     voiceGender:  $('s-voice-gender').value,
