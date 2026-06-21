@@ -280,7 +280,7 @@
   <div class="modal-overlay" id="help-overlay">
     <div class="modal help-modal" role="dialog" aria-modal="true" aria-label="Help">
       <div class="modal-header">
-        <h2>How to use VideoCall</h2>
+        <h2>วิธีใช้งาน VideoCall</h2>
         <button class="icon-btn" id="help-close-btn">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -293,99 +293,97 @@
         <div class="help-section">
           <div class="help-section-title">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-            Talk with AI
+            คุยกับ AI
           </div>
-          <p>Chat with an AI assistant in Thai. Type or use the Speech button. The AI replies in Thai and animates the robot face with emotion JSON embedded in its message. Press <strong>End</strong> to reset the conversation.</p>
+          <p>พิมพ์หรือใช้ปุ่ม Speech เพื่อพูดคุยกับ AI เป็นภาษาไทย AI จะตอบกลับและแสดงอารมณ์ผ่านหน้าหุ่นยนต์ กด <strong>End</strong> เพื่อเริ่มบทสนทนาใหม่</p>
         </div>
 
         <div class="help-section">
           <div class="help-section-title">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Talk with Person
+            คุยกับคน
           </div>
-          <p>Video call another person over WebRTC. Share your <strong>room code</strong> or enter theirs to connect. Audio and video are peer-to-peer; text goes through a data channel (falling back to socket relay).</p>
+          <p>วิดีโอคอลกับคนอื่นแบบ peer-to-peer แชร์ <strong>รหัสห้อง</strong> หรือกรอกรหัสของอีกฝ่ายเพื่อเชื่อมต่อ</p>
           <ul class="help-list">
-            <li>Copy your code with the <strong>Copy</strong> button and send it to your peer.</li>
-            <li>Paste their code into the join field and press <strong>Join</strong>.</li>
-            <li>The <strong>speaker icon</strong> in the chat header lets your peer hear your messages read aloud.</li>
+            <li>กด <strong>Copy</strong> เพื่อคัดลอกรหัสห้องของคุณแล้วส่งให้อีกฝ่าย</li>
+            <li>วางรหัสของอีกฝ่ายในช่อง Join แล้วกด <strong>Join</strong></li>
+            <li>ไอคอน <strong>🔊</strong> ในส่วนหัวแชท — ให้อีกฝ่ายได้ยินข้อความของคุณเป็นเสียงพูด</li>
           </ul>
         </div>
 
         <div class="help-section">
           <div class="help-section-title">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><line x1="12" y1="3" x2="12" y2="7"/></svg>
-            Robot Mode
+            โหมดหุ่นยนต์
           </div>
-          <p>Control the InMoov robot head directly from the browser.</p>
+          <p>โหมดนี้ใช้ร่วมกับ <strong>คุยกับคน</strong> เท่านั้น — ฝั่งหนึ่งเปิดโหมดหุ่นยนต์เพื่อควบคุมหัวหุ่น อีกฝั่งเชื่อมเข้าห้องเดียวกันเพื่อส่งคำสั่ง</p>
           <ul class="help-list">
-            <li><strong>Joystick</strong> (left) — drag to move the eyes left/right/up/down.</li>
-            <li><strong>D-pad</strong> (right) — ◄► rotates the head; ▲▼ opens/closes the mouth.</li>
-            <li><strong>⦿ Center button</strong> — resets all axes to neutral.</li>
-            <li>Commands are sent over WebRTC data channel (peer-to-peer) and also published to the MQTT broker so <code>deep.py</code> can forward them to the Arduino.</li>
+            <li><strong>จอยสติ๊ก</strong> (ซ้าย) — ลากเพื่อหมุนลูกตาซ้าย/ขวา/บน/ล่าง</li>
+            <li><strong>D-pad</strong> (ขวา) — ◄► หันหัว, ▲▼ เปิด/ปิดปาก</li>
+            <li><strong>ปุ่ม ⦿</strong> — รีเซ็ตทุกแกนกลับตำแหน่งกลาง</li>
           </ul>
         </div>
 
         <div class="help-section">
           <div class="help-section-title">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M8 11v1a4 4 0 0 0 8 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
-            Speech (STT)
+            การพูด (STT)
           </div>
-          <p>Press the <strong>Speech</strong> button in the toolbar to start listening.</p>
+          <p>กดปุ่ม <strong>Speech</strong> เพื่อเริ่มฟัง ระบบจะแปลงเสียงเป็นข้อความแล้วส่งให้ AI โดยอัตโนมัติ</p>
           <ul class="help-list">
-            <li><strong>Whisper mode</strong> (default) — records until silence is detected, then transcribes via Groq Whisper. Automatically restarts after the AI finishes speaking.</li>
-            <li><strong>Browser STT mode</strong> — uses your browser's built-in speech recognition (requires Google Chrome / Edge). Runs continuously.</li>
-            <li><strong>AI Speech Correction</strong> — the transcript is sent to the AI with recent conversation context to fix Thai homophones before sending.</li>
-            <li>Switch modes in <strong>Settings → Speech-to-Text Mode</strong>.</li>
+            <li><strong>โหมด Whisper</strong> (ค่าเริ่มต้น) — บันทึกเสียงจนเงียบแล้วส่งถอดความ หลัง AI พูดจบจะเริ่มฟังใหม่เอง</li>
+            <li><strong>โหมด Browser STT</strong> — ใช้ระบบรู้จำเสียงของเบราว์เซอร์ ทำงานต่อเนื่อง (ต้องใช้ Chrome/Edge)</li>
+            <li><strong>AI Speech Correction</strong> — ส่งข้อความที่ได้ยินให้ AI ตรวจคำผิดก่อนส่ง โดยอ้างอิงบริบทการสนทนาล่าสุด</li>
+            <li>เปลี่ยนโหมดได้ที่ <strong>Settings → Speech-to-Text Mode</strong></li>
           </ul>
         </div>
 
         <div class="help-section">
           <div class="help-section-title">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-            Voice Response (TTS)
+            เสียงตอบกลับ (TTS)
           </div>
-          <p>The AI's replies are read aloud automatically using your browser's Text-to-Speech engine. Emotion JSON blocks in the AI response are stripped before speaking.</p>
+          <p>คำตอบของ AI จะถูกอ่านออกเสียงอัตโนมัติผ่าน Text-to-Speech ของเบราว์เซอร์</p>
           <ul class="help-list">
-            <li>Toggle TTS on/off in <strong>Settings → AI Voice Response</strong>.</li>
-            <li>Adjust speed with <strong>Voice Rate</strong> and gender with <strong>AI Voice Gender</strong>.</li>
-            <li>Each chat message has a <strong>🔊 speaker button</strong> to replay it on demand.</li>
-            <li>On iOS, tap any button first to unlock audio before TTS will work.</li>
+            <li>เปิด/ปิด TTS ได้ที่ <strong>Settings → AI Voice Response</strong></li>
+            <li>ปรับความเร็วได้ที่ <strong>Voice Rate</strong> และเพศเสียงได้ที่ <strong>AI Voice Gender</strong></li>
+            <li>ทุกข้อความมีปุ่ม <strong>🔊</strong> เพื่อเปิดเสียงซ้ำได้ทุกเมื่อ</li>
+            <li>บน iOS ให้กดปุ่มใดก็ได้ก่อนเพื่อปลดล็อกเสียง</li>
           </ul>
         </div>
 
         <div class="help-section">
           <div class="help-section-title">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            Settings ⚙
+            การตั้งค่า ⚙
           </div>
           <ul class="help-list">
-            <li><strong>Provider</strong> — choose AI backend: Groq, OpenRouter, 9Arm, Gemini, Anthropic, or any OpenAI-compatible URL.</li>
-            <li><strong>API Key</strong> — only shown when the server does not have a key configured. Enter your own key here.</li>
-            <li><strong>Model</strong> — select from the dropdown or type a custom model ID.</li>
-            <li><strong>System Prompt</strong> — defines the AI's personality. The default makes it a Thai-speaking robot that animates its face.</li>
-            <li><strong>MQTT Broker URL</strong> — WebSocket URL of your Mosquitto broker (e.g. <code>wss://test.mosquitto.org:8081</code>).</li>
-            <li><strong>TURN servers</strong> — optional custom TURN for cross-network WebRTC calls.</li>
+            <li><strong>Provider</strong> — เลือก AI ที่ต้องการใช้: Groq, OpenRouter, 9Arm, Gemini, Anthropic หรือ URL อื่น ๆ ที่รองรับ OpenAI</li>
+            <li><strong>Model</strong> — เลือกโมเดลจาก dropdown หรือพิมพ์ชื่อโมเดลเอง</li>
+            <li><strong>System Prompt</strong> — กำหนดบุคลิกของ AI ค่าเริ่มต้นทำให้ AI พูดภาษาไทยและแสดงอารมณ์ผ่านหน้าหุ่น</li>
+            <li><strong>MQTT Broker URL</strong> — URL WebSocket ของ Mosquitto broker สำหรับส่งคำสั่งไปยัง Arduino</li>
+            <li><strong>TURN servers</strong> — เพิ่ม TURN server เองหากต้องการโทรข้ามเครือข่าย</li>
           </ul>
         </div>
 
         <div class="help-section">
           <div class="help-section-title">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-            Toolbar Buttons
+            ปุ่มควบคุม
           </div>
           <ul class="help-list">
-            <li><strong>Mic</strong> — mute/unmute your microphone in video calls.</li>
-            <li><strong>Camera</strong> — turn your camera on/off.</li>
-            <li><strong>Speech</strong> — toggle speech recognition (STT).</li>
-            <li><strong>End</strong> — hang up the call or reset the AI conversation.</li>
-            <li><strong>🔊 (chat header)</strong> — request your messages to be read aloud on your peer's device.</li>
+            <li><strong>Mic</strong> — เปิด/ปิดไมโครโฟน</li>
+            <li><strong>Camera</strong> — เปิด/ปิดกล้อง</li>
+            <li><strong>Speech</strong> — เปิด/ปิดการรับรู้เสียง</li>
+            <li><strong>End</strong> — วางสาย หรือรีเซ็ตบทสนทนากับ AI</li>
+            <li><strong>🔊 (หัวแชท)</strong> — ให้อีกฝ่ายได้ยินข้อความของเราเป็นเสียงพูด</li>
           </ul>
         </div>
 
       </div>
 
       <div class="modal-footer">
-        <button class="btn primary" id="help-got-it-btn">Got it</button>
+        <button class="btn primary" id="help-got-it-btn">เข้าใจแล้ว</button>
       </div>
     </div>
   </div>
