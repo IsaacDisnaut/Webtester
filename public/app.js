@@ -162,7 +162,6 @@ const state = {
 const aiHistory = [];
 const peers = {};        // peerId → { pc, dc }
 let socket = null;
-let translateEnabled = false;
 let iceConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }; // fallback
 let recognition = null;
 let interimMsgEl = null;
@@ -762,7 +761,6 @@ function initSpeechRecognition() {
         }
 
         console.log('[STT] sending to AI:', corrected);
-        addTranslation(speechWrap, corrected);
 
         if (state.mode === 'person') sendToPeer(corrected);
         else sendToAI(corrected);
@@ -986,7 +984,6 @@ async function transcribeWhisper(blob) {
     const timingParts = [['STT', sttMs]];
     if (corrMs !== null) timingParts.push(['correction', corrMs]);
     showTimingLog(timingParts);
-    addTranslation(speechWrap, corrected);
     if (state.mode === 'person') sendToPeer(corrected);
     else sendToAI(corrected);
   } catch (err) {
@@ -1104,43 +1101,6 @@ function togglePeerTTS() {
 }
 
 // ════════════════════════════════════════════════
-//  GEMINI LIVE TRANSLATE
-// ════════════════════════════════════════════════
-async function translateText(text) {
-  const res = await fetch('/api/translate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  return data.translated || '';
-}
-
-function addTranslation(msgWrap, text) {
-  if (!translateEnabled) return;
-  const el = document.createElement('div');
-  el.className = 'msg-translation loading';
-  el.textContent = '…';
-  msgWrap.appendChild(el);
-  translateText(text)
-    .then(t => { el.textContent = t; el.classList.remove('loading'); })
-    .catch(() => el.remove());
-}
-
-function toggleTranslate() {
-  translateEnabled = !translateEnabled;
-  const btn = $('translate-btn');
-  btn.classList.toggle('active-translate', translateEnabled);
-  btn.title = translateEnabled
-    ? 'Gemini Translate ON (Thai ↔ English)'
-    : 'Gemini Live Translate (Thai ↔ English)';
-  showSystemMsg(translateEnabled
-    ? 'Gemini Live Translate ON — Thai ↔ English translation shown under messages.'
-    : 'Gemini Translate OFF.');
-}
-
-// ════════════════════════════════════════════════
 //  CHAT UI
 // ════════════════════════════════════════════════
 function clearWelcome() {
@@ -1252,7 +1212,6 @@ async function sendMessage() {
   autoResizeInput();
 
   const youWrap = appendMessage(currentUserName, text, 'you');
-  addTranslation(youWrap, text);
 
   if (state.mode === 'person') {
     sendToPeer(text);
@@ -1346,7 +1305,6 @@ async function sendToAI(text) {
       publishEmotion(data.content);
       const aiWrap = appendMessage('AI', displayText, 'ai');
       showTimingLog([['AI reply', aiMs]]);
-      addTranslation(aiWrap, displayText);
       speak(displayText);
     }
   } catch (err) {
@@ -1408,7 +1366,6 @@ function initSocket() {
 
   socket.on('chat-message', ({ from, message }) => {
     const wrap = appendMessage('Peer', message, 'peer');
-    addTranslation(wrap, message);
     speakPeerMessage(message);
   });
 
@@ -1481,7 +1438,6 @@ function setupDataChannel(peerId, dc) {
   dc.onmessage = (e) => {
     if (applyRobotPayload(e.data)) return;  // robot control — don't show as chat
     const wrap = appendMessage('Peer', e.data, 'peer');
-    addTranslation(wrap, e.data);
     speakPeerMessage(e.data);
   };
   dc.onerror = (e) => console.warn('DC error:', e);
@@ -1670,7 +1626,6 @@ function bindEventListeners() {
   speechBtn.addEventListener('click', toggleSpeech);
   endBtn.addEventListener('click', endCall);
   $('peer-tts-btn').addEventListener('click', togglePeerTTS);
-  $('translate-btn').addEventListener('click', toggleTranslate);
 
   sendBtn.addEventListener('click', sendMessage);
   chatInput.addEventListener('keydown', (e) => {

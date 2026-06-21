@@ -115,45 +115,6 @@ app.get('/api/provider-defaults', (req, res) => {
   });
 });
 
-// ── Translate proxy (supports Groq/Llama and Gemini) ────────
-app.post('/api/translate', async (req, res) => {
-  const { text } = req.body;
-  if (!text) return res.status(400).json({ error: 'text required' });
-  if (!API_KEY) return res.status(503).json({ error: 'No API key configured' });
-  const prompt = `Translate the following text. If it is Thai, translate to English. If it is English, translate to Thai. Output ONLY the translation, no explanation.\n\n${text}`;
-  try {
-    let translated;
-    if (KEY_PROVIDER === 'groq' || KEY_PROVIDER === 'openrouter') {
-      const url   = KEY_PROVIDER === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://openrouter.ai/api/v1/chat/completions';
-      const model = KEY_PROVIDER === 'groq' ? 'llama-3.3-70b-versatile' : 'qwen/qwen-2.5-72b-instruct';
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_KEY}` },
-        body: JSON.stringify({ model, messages: [{ role: 'user', content: prompt }], temperature: 0.1 }),
-      });
-      if (!r.ok) return res.status(r.status).json({ error: await r.text() });
-      translated = (await r.json()).choices[0].message.content.trim();
-    } else {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 512, temperature: 0.1 },
-          }),
-        }
-      );
-      if (!r.ok) return res.status(r.status).json({ error: await r.text() });
-      translated = (await r.json()).candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-    }
-    res.json({ translated });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ── Whisper STT ─────────────────────────────────────────────
 app.post('/api/stt', express.raw({ type: '*/*', limit: '25mb' }), async (req, res) => {
   const key = KEYS.groq;
