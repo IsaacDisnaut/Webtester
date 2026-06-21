@@ -333,7 +333,6 @@
           <ul class="help-list">
             <li><strong>โหมด Whisper</strong> (ค่าเริ่มต้น) — บันทึกเสียงจนเงียบแล้วส่งถอดความ หลัง AI พูดจบจะเริ่มฟังใหม่เอง</li>
             <li><strong>โหมด Browser STT</strong> — ใช้ระบบรู้จำเสียงของเบราว์เซอร์ ทำงานต่อเนื่อง (ต้องใช้ Chrome/Edge)</li>
-            <li><strong>AI Speech Correction</strong> — ส่งข้อความที่ได้ยินให้ AI ตรวจคำผิดก่อนส่ง โดยอ้างอิงบริบทการสนทนาล่าสุด</li>
             <li>เปลี่ยนโหมดได้ที่ <strong>Settings → Speech-to-Text Mode</strong></li>
           </ul>
         </div>
@@ -443,11 +442,6 @@
             <option value="whisper">Whisper (Groq) — push-to-talk, reliable</option>
             <option value="browser">Browser STT — continuous, needs Google</option>
           </select>
-        </label>
-
-        <label class="field row">
-          <span>AI Speech Correction (STT)</span>
-          <input id="s-stt-correct" type="checkbox" />
         </label>
 
         <label class="field row">
