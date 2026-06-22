@@ -236,6 +236,79 @@ const joinBtn          = $('join-btn');
 const copyCodeBtn      = $('copy-code-btn');
 const speechIndicator  = $('speech-indicator');
 const settingsOverlay  = $('settings-overlay');
+const detectBtn        = $('detect-btn');
+const detectCanvas     = $('detect-canvas');
+
+let detectOn      = false;
+let detectLoopId  = null;  // setTimeout handle
+
+// ────────────────────────────────────────────────
+//  YOLO OBJECT DETECTION (via yolo_server.py)
+// ────────────────────────────────────────────────
+function toggleDetect() {
+  detectOn = !detectOn;
+  detectBtn.classList.toggle('off', !detectOn);
+  detectCanvas.style.display = detectOn ? '' : 'none';
+  const localWrap = $('local-wrap');
+  if (detectOn) {
+    localWrap.style.display = '';  // always show camera when detect is active
+    runDetectionLoop();
+  } else {
+    clearTimeout(detectLoopId);
+    const ctx = detectCanvas.getContext('2d');
+    ctx.clearRect(0, 0, detectCanvas.width, detectCanvas.height);
+    // restore local-wrap visibility to mode default
+    if (state.mode === 'ai' || state.mode === 'robot') localWrap.style.display = '';
+  }
+}
+
+async function runDetectionLoop() {
+  if (!detectOn) return;
+
+  // Size canvas to match video element
+  const vw = localVideo.videoWidth  || localVideo.clientWidth;
+  const vh = localVideo.videoHeight || localVideo.clientHeight;
+  if (vw > 0 && vh > 0) {
+    detectCanvas.width  = vw;
+    detectCanvas.height = vh;
+
+    // Capture frame to temp canvas (un-mirrored, as captured by camera)
+    const tmp = document.createElement('canvas');
+    tmp.width = vw; tmp.height = vh;
+    tmp.getContext('2d').drawImage(localVideo, 0, 0, vw, vh);
+
+    try {
+      const blob = await new Promise(r => tmp.toBlob(r, 'image/jpeg', 0.7));
+      const res  = await fetch('/api/detect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/jpeg' },
+        body: blob,
+      });
+      const boxes = await res.json();
+
+      const ctx = detectCanvas.getContext('2d');
+      ctx.clearRect(0, 0, vw, vh);
+      ctx.font      = 'bold 13px sans-serif';
+      ctx.lineWidth = 2;
+
+      for (const { x1, y1, x2, y2, label, conf } of boxes) {
+        const hue = Math.abs(label.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
+        const color = `hsl(${hue},90%,55%)`;
+        ctx.strokeStyle = color;
+        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+        const tag = `${label} ${(conf * 100).toFixed(0)}%  (${Math.round((x1+x2)/2)},${Math.round((y1+y2)/2)})`;
+        const tw  = ctx.measureText(tag).width;
+        ctx.fillStyle = color;
+        ctx.fillRect(x1, y1 - 18, tw + 8, 18);
+        ctx.fillStyle = '#000';
+        ctx.fillText(tag, x1 + 4, y1 - 4);
+      }
+    } catch {}
+  }
+
+  detectLoopId = setTimeout(runDetectionLoop, 400);
+}
 
 // ════════════════════════════════════════════════
 //  BOOT
@@ -369,7 +442,7 @@ function applyMode(mode) {
     robotPanel.style.display = 'flex';
     if (controlsRow) controlsRow.style.display = 'none';
     remoteWrap.style.display = 'none';
-    localWrap.style.display  = 'none';
+    localWrap.style.display  = '';   // show camera in AI mode
     initRobotPanel();
   } else {
     robotPanel.style.display = 'none';
@@ -1554,6 +1627,7 @@ function bindEventListeners() {
   micBtn.addEventListener('click', toggleMic);
   videoBtn.addEventListener('click', toggleCam);
   speechBtn.addEventListener('click', toggleSpeech);
+  detectBtn.addEventListener('click', toggleDetect);
   endBtn.addEventListener('click', endCall);
   $('peer-tts-btn').addEventListener('click', togglePeerTTS);
 

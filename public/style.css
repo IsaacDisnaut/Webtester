@@ -526,6 +526,14 @@ body {
   transform: scaleX(-1);
 }
 #local-video.hidden { display: none; }
+.detect-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1);
+  pointer-events: none;
+}
 .cam-off-placeholder {
   position: absolute;
   inset: 0;

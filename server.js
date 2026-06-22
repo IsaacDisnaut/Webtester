@@ -298,6 +298,20 @@ app.get('/api/sessions', (req, res) => {
   res.json(stmtGetAll.all());
 });
 
+// ── YOLO detection proxy (forwards JPEG frame to yolo_server.py on :5001) ──
+app.post('/api/detect', express.raw({ type: 'image/jpeg', limit: '5mb' }), async (req, res) => {
+  try {
+    const r = await fetch('http://127.0.0.1:5001/detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/jpeg', 'Content-Length': req.body.length },
+      body: req.body,
+    });
+    res.json(await r.json());
+  } catch {
+    res.json([]);  // yolo_server.py not running — return empty detections
+  }
+});
+
 // ── Socket.io signaling ─────────────────────────────────────
 function attachSocketIO(server) {
   const io = new Server(server, {
