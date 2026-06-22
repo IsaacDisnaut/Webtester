@@ -2,6 +2,7 @@ import sys
 sys.path.insert(0, r"D:\python_packages")
 
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from datetime import datetime
 import json
 import cv2
 import numpy as np
@@ -40,6 +41,17 @@ class DetectHandler(BaseHTTPRequestHandler):
                 'conf': round(float(box.conf[0]), 2),
                 'label': NAMES[int(box.cls[0])],
             })
+
+        # ── console log ──
+        ts = datetime.now().strftime('%H:%M:%S')
+        if detections:
+            items = ', '.join(
+                f"{d['label']} {int(d['conf']*100)}% ({(d['x1']+d['x2'])//2},{(d['y1']+d['y2'])//2})"
+                for d in detections
+            )
+            print(f"[{ts}] {len(detections)} object(s): {items}")
+        else:
+            print(f"[{ts}] nothing detected")
 
         resp = json.dumps(detections).encode()
         self.send_response(200)
