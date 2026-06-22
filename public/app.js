@@ -249,16 +249,27 @@ function toggleDetect() {
   detectOn = !detectOn;
   detectBtn.classList.toggle('off', !detectOn);
   detectCanvas.style.display = detectOn ? '' : 'none';
-  const localWrap = $('local-wrap');
+
+  const localWrap  = $('local-wrap');
+  const robotPanel = $('robot-panel');
+
   if (detectOn) {
-    localWrap.style.display = '';  // always show camera when detect is active
+    // Expand camera to fill the video column; hide robot panel behind it
+    localWrap.style.cssText =
+      'display:block; position:relative; width:100%; flex:1; border-radius:0; border:none;';
+    if (robotPanel) robotPanel.style.display = 'none';
     runDetectionLoop();
   } else {
     clearTimeout(detectLoopId);
     const ctx = detectCanvas.getContext('2d');
     ctx.clearRect(0, 0, detectCanvas.width, detectCanvas.height);
-    // restore local-wrap visibility to mode default
-    if (state.mode === 'ai' || state.mode === 'robot') localWrap.style.display = '';
+    // Restore local-wrap to its default CSS (position:absolute PiP at bottom-right)
+    localWrap.style.cssText = '';
+    // Restore robot panel in AI / robot mode
+    if (state.mode === 'ai' || state.mode === 'robot') {
+      if (robotPanel) robotPanel.style.display = 'flex';
+      localWrap.style.display = 'none';
+    }
   }
 }
 
@@ -442,7 +453,8 @@ function applyMode(mode) {
     robotPanel.style.display = 'flex';
     if (controlsRow) controlsRow.style.display = 'none';
     remoteWrap.style.display = 'none';
-    localWrap.style.display  = '';   // show camera in AI mode
+    localWrap.style.cssText  = '';   // reset any detect-mode overrides; CSS default hides it
+    localWrap.style.display  = 'none';
     initRobotPanel();
   } else {
     robotPanel.style.display = 'none';
