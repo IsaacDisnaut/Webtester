@@ -238,6 +238,8 @@ const speechIndicator  = $('speech-indicator');
 const settingsOverlay  = $('settings-overlay');
 const detectBtn        = $('detect-btn');
 const detectCanvas     = $('detect-canvas');
+const aiCameraPanel    = $('ai-camera-panel');
+const aiDetectCanvas   = $('ai-detect-canvas');
 
 let detectOn      = false;
 let detectLoopId  = null;  // setTimeout handle
@@ -254,17 +256,13 @@ function switchAiTab(tab) {
     b.classList.toggle('active', b.dataset.tab === tab)
   );
   const robotPanel = $('robot-panel');
-  const localWrap  = $('local-wrap');
 
   if (tab === 'robot') {
-    if (robotPanel) robotPanel.style.display = 'flex';
-    localWrap.style.cssText    = 'display:none;';
-    detectCanvas.style.display = 'none';
+    robotPanel.style.display      = 'flex';
+    aiCameraPanel.style.display   = 'none';
   } else {
-    if (robotPanel) robotPanel.style.display = 'none';
-    localWrap.style.cssText =
-      'display:block; position:relative; width:100%; flex:1; border-radius:0; border:none;';
-    detectCanvas.style.display = '';
+    robotPanel.style.display      = 'none';
+    aiCameraPanel.style.display   = 'flex';
   }
 }
 
@@ -296,14 +294,18 @@ function toggleDetect() {
 async function runDetectionLoop() {
   if (!detectOn) return;
 
-  // Size canvas to match video element
   const vw = localVideo.videoWidth  || localVideo.clientWidth;
   const vh = localVideo.videoHeight || localVideo.clientHeight;
-  if (vw > 0 && vh > 0) {
-    detectCanvas.width  = vw;
-    detectCanvas.height = vh;
 
-    // Capture frame to temp canvas (un-mirrored, as captured by camera)
+  if (vw > 0 && vh > 0) {
+    // Choose which canvas to draw on
+    const inAiCamera = (state.mode === 'ai' && aiTab === 'camera');
+    const target = inAiCamera ? aiDetectCanvas : detectCanvas;
+
+    target.width  = vw;
+    target.height = vh;
+
+    // Capture un-mirrored frame for YOLO
     const tmp = document.createElement('canvas');
     tmp.width = vw; tmp.height = vh;
     tmp.getContext('2d').drawImage(localVideo, 0, 0, vw, vh);
@@ -317,13 +319,17 @@ async function runDetectionLoop() {
       });
       const boxes = await res.json();
 
-      const ctx = detectCanvas.getContext('2d');
+      const ctx = target.getContext('2d');
       ctx.clearRect(0, 0, vw, vh);
+
+      // In AI camera tab: draw the video frame first (canvas replaces the video element)
+      if (inAiCamera) ctx.drawImage(localVideo, 0, 0, vw, vh);
+
       ctx.font      = 'bold 13px sans-serif';
       ctx.lineWidth = 2;
 
       for (const { x1, y1, x2, y2, label, conf } of boxes) {
-        const hue = Math.abs(label.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
+        const hue   = Math.abs(label.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
         const color = `hsl(${hue},90%,55%)`;
         ctx.strokeStyle = color;
         ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
@@ -477,14 +483,14 @@ function applyMode(mode) {
     if (detectOn) { detectOn = false; clearTimeout(detectLoopId); }
     initRobotPanel();
   } else if (mode === 'ai') {
-    aiTabs.style.display    = 'flex';
-    detectBtn.style.display = 'none';   // tabs replace the detect button in AI mode
+    aiTabs.style.display     = 'flex';
+    detectBtn.style.display  = 'none';
     if (controlsRow) controlsRow.style.display = 'none';
     remoteWrap.style.display = 'none';
+    localWrap.style.display  = 'none';   // local-wrap stays as PiP only for person mode
     roomBar.style.display    = 'none';
-    // auto-start detection
     if (!detectOn) { detectOn = true; runDetectionLoop(); }
-    switchAiTab('robot');   // default to robot tab
+    switchAiTab('robot');
     initRobotPanel();
   } else {
     aiTabs.style.display     = 'none';

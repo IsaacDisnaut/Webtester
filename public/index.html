@@ -168,6 +168,17 @@
         <span class="local-label">You</span>
       </div>
 
+      <!-- AI camera panel (shown on Camera tab — flex child, fills space between tabs and controls) -->
+      <div id="ai-camera-panel" style="display:none">
+        <canvas id="ai-detect-canvas"></canvas>
+        <div class="cam-off-placeholder" id="ai-cam-placeholder" style="display:none">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+          </svg>
+          <span style="margin-top:8px;font-size:.8rem;color:var(--text-muted)">Camera off</span>
+        </div>
+      </div>
+
       <!-- ── Robot Control Panel ── -->
       <div id="robot-panel" class="robot-panel" style="display:none">
 
