@@ -32,7 +32,7 @@ while True:
     if not ret:
         break
 
-    results = model(frame, verbose=False)[0]
+    results = model(frame, verbose=False, conf=0.60)[0]
     h, w = frame.shape[:2]
 
     # ── draw boxes on camera frame ──

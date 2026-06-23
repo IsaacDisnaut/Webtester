@@ -10,6 +10,7 @@ from ultralytics import YOLO
 
 model = YOLO("yolov8n.pt")
 NAMES = model.names
+CONF_THRESHOLD = 0.60
 
 class DetectHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
@@ -32,7 +33,7 @@ class DetectHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        results = model(frame, verbose=False)[0]
+        results = model(frame, verbose=False, conf=CONF_THRESHOLD)[0]
         detections = []
         for box in results.boxes:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
