@@ -241,10 +241,34 @@ const detectCanvas     = $('detect-canvas');
 
 let detectOn      = false;
 let detectLoopId  = null;  // setTimeout handle
+let aiTab         = 'robot'; // 'robot' | 'camera'
 
 // ────────────────────────────────────────────────
 //  YOLO OBJECT DETECTION (via yolo_server.py)
 // ────────────────────────────────────────────────
+
+// Switch between Robot model and Camera+detect in AI mode
+function switchAiTab(tab) {
+  aiTab = tab;
+  document.querySelectorAll('.ai-tab').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === tab)
+  );
+  const robotPanel = $('robot-panel');
+  const localWrap  = $('local-wrap');
+
+  if (tab === 'robot') {
+    if (robotPanel) robotPanel.style.display = 'flex';
+    localWrap.style.cssText    = 'display:none;';
+    detectCanvas.style.display = 'none';
+  } else {
+    if (robotPanel) robotPanel.style.display = 'none';
+    localWrap.style.cssText =
+      'display:block; position:relative; width:100%; flex:1; border-radius:0; border:none;';
+    detectCanvas.style.display = '';
+  }
+}
+
+// Toggle for person/robot modes (detect button)
 function toggleDetect() {
   detectOn = !detectOn;
   detectBtn.classList.toggle('off', !detectOn);
@@ -254,18 +278,14 @@ function toggleDetect() {
   const robotPanel = $('robot-panel');
 
   if (detectOn) {
-    // Expand camera to fill the video column; hide robot panel behind it
     localWrap.style.cssText =
       'display:block; position:relative; width:100%; flex:1; border-radius:0; border:none;';
     if (robotPanel) robotPanel.style.display = 'none';
     runDetectionLoop();
   } else {
     clearTimeout(detectLoopId);
-    const ctx = detectCanvas.getContext('2d');
-    ctx.clearRect(0, 0, detectCanvas.width, detectCanvas.height);
-    // Restore local-wrap to its default CSS (position:absolute PiP at bottom-right)
+    detectCanvas.getContext('2d').clearRect(0, 0, detectCanvas.width, detectCanvas.height);
     localWrap.style.cssText = '';
-    // Restore robot panel in AI / robot mode
     if (state.mode === 'ai' || state.mode === 'robot') {
       if (robotPanel) robotPanel.style.display = 'flex';
       localWrap.style.display = 'none';
@@ -441,30 +461,49 @@ function applyMode(mode) {
 
   const controlsRow = document.querySelector('.robot-controls-row');
 
+  const aiTabs = $('ai-tabs');
+
   if (mode === 'robot') {
+    aiTabs.style.display     = 'none';
+    detectBtn.style.display  = '';
     robotPanel.style.display = 'flex';
     if (controlsRow) controlsRow.style.display = '';
     remoteWrap.style.display = 'none';
+    localWrap.style.cssText  = '';
     localWrap.style.display  = 'none';
     roomBar.style.display = currentRoomId ? 'block' : 'none';
     if (recognition) recognition.lang = 'th-TH';
+    // stop AI-mode detect loop if switching away
+    if (detectOn) { detectOn = false; clearTimeout(detectLoopId); }
     initRobotPanel();
   } else if (mode === 'ai') {
-    robotPanel.style.display = 'flex';
+    aiTabs.style.display    = 'flex';
+    detectBtn.style.display = 'none';   // tabs replace the detect button in AI mode
     if (controlsRow) controlsRow.style.display = 'none';
     remoteWrap.style.display = 'none';
-    localWrap.style.cssText  = '';   // reset any detect-mode overrides; CSS default hides it
-    localWrap.style.display  = 'none';
+    roomBar.style.display    = 'none';
+    // auto-start detection
+    if (!detectOn) { detectOn = true; runDetectionLoop(); }
+    switchAiTab('robot');   // default to robot tab
     initRobotPanel();
   } else {
+    aiTabs.style.display     = 'none';
+    detectBtn.style.display  = '';
     robotPanel.style.display = 'none';
     if (controlsRow) controlsRow.style.display = '';
     remoteWrap.style.display = '';
+    localWrap.style.cssText  = '';
     localWrap.style.display  = '';
+    // stop AI-mode detect loop if switching away
+    if (detectOn && aiTab !== null) {
+      detectOn = false;
+      clearTimeout(detectLoopId);
+      detectCanvas.style.display = 'none';
+      detectBtn.classList.remove('off');
+    }
   }
 
   if (mode === 'ai') {
-    roomBar.style.display = 'none';
     aiAvatar.style.display = 'none';
     remoteVideo.classList.remove('active');
     remoteName.textContent = 'AI Assistant';
@@ -1641,6 +1680,10 @@ function bindEventListeners() {
   speechBtn.addEventListener('click', toggleSpeech);
   detectBtn.addEventListener('click', toggleDetect);
   endBtn.addEventListener('click', endCall);
+
+  document.querySelectorAll('.ai-tab').forEach(btn =>
+    btn.addEventListener('click', () => switchAiTab(btn.dataset.tab))
+  );
   $('peer-tts-btn').addEventListener('click', togglePeerTTS);
 
   sendBtn.addEventListener('click', sendMessage);

@@ -503,6 +503,37 @@ body {
 }
 @keyframes badge-blink { from { opacity: .7; } to { opacity: 1; } }
 
+/* AI mode tab bar */
+.ai-tabs {
+  display: flex;
+  flex-shrink: 0;
+  background: #050810;
+  border-bottom: 1px solid var(--border);
+  padding: 0 10px;
+  gap: 4px;
+}
+.ai-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  padding: 9px 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: .78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+  justify-content: center;
+}
+.ai-tab:hover { color: var(--text); }
+.ai-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
 /* Local PiP */
 .local-wrap {
   position: absolute;

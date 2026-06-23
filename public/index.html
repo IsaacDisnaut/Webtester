@@ -119,6 +119,18 @@
         <div class="room-status" id="room-status"></div>
       </div>
 
+      <!-- AI mode tab switcher (robot model ↔ camera detect) -->
+      <div class="ai-tabs" id="ai-tabs" style="display:none">
+        <button class="ai-tab active" data-tab="robot">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><line x1="12" y1="3" x2="12" y2="7"/></svg>
+          Robot
+        </button>
+        <button class="ai-tab" data-tab="camera">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          Camera
+        </button>
+      </div>
+
       <!-- Remote video / AI avatar -->
       <div class="remote-wrap" id="remote-wrap">
         <video id="remote-video" autoplay playsinline></video>
