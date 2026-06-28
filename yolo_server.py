@@ -43,16 +43,15 @@ class DetectHandler(BaseHTTPRequestHandler):
                 'label': NAMES[int(box.cls[0])],
             })
 
-        # ── console log ──
+        # ── console log (only >= 50% confidence) ──
         ts = datetime.now().strftime('%H:%M:%S')
-        if detections:
+        visible = [d for d in detections if d['conf'] >= 0.5]
+        if visible:
             items = ', '.join(
                 f"{d['label']} {int(d['conf']*100)}% ({(d['x1']+d['x2'])//2},{(d['y1']+d['y2'])//2})"
-                for d in detections
+                for d in visible
             )
-            print(f"[{ts}] {len(detections)} object(s): {items}")
-        else:
-            print(f"[{ts}] nothing detected")
+            print(f"[{ts}] {len(visible)} object(s): {items}")
 
         resp = json.dumps(detections).encode()
         self.send_response(200)

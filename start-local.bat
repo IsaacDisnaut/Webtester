@@ -33,13 +33,25 @@ if not exist "%~dp0videocall\node_modules" (
     popd
 )
 
+:: ── Start Mosquitto (local MQTT broker) ──
+echo [1/4] Starting local Mosquitto MQTT broker...
+set MOSQ_EXE=C:\Program Files\Mosquitto\mosquitto.exe
+if exist "%MOSQ_EXE%" (
+    start "Mosquitto MQTT" cmd /k ""%MOSQ_EXE%" -c "%~dp0mosquitto\mosquitto-local.conf" -v"
+    timeout /t 2 /nobreak >nul
+    echo [INFO] Mosquitto started ^(plain WS: 9001, WSS: 9443, TCP: 1883^)
+) else (
+    echo [WARN] mosquitto.exe not found at "%MOSQ_EXE%"
+    echo        Install: winget install EclipseFoundation.Mosquitto  ^(run as Admin^)
+)
+
 :: ── Start Node.js server in a new window ──
-echo [1/3] Starting Node.js server on port 3000...
+echo [2/4] Starting Node.js server on port 3000...
 start "VideoCall Server" cmd /k "cd /d "%~dp0videocall" && set NODE_ENV=production&& set PORT=3000&& node server.js"
-timeout /t 3 /nobreak >nul
+timeout /t 4 /nobreak >nul
 
 :: ── Optionally start YOLO detection server ──
-set /p START_YOLO="[2/3] Start YOLO detection server too? (y/n): "
+set /p START_YOLO="[3/4] Start YOLO detection server too? (y/n): "
 if /i "%START_YOLO%"=="y" (
     where python >nul 2>&1
     if %errorlevel% equ 0 (
@@ -53,8 +65,9 @@ if /i "%START_YOLO%"=="y" (
 
 :: ── Start Cloudflare Tunnel ──
 echo.
-echo [3/3] Starting Cloudflare Tunnel...
+echo [4/4] Starting Cloudflare Tunnel...
 echo       Your public HTTPS URL will appear below ^(look for "trycloudflare.com"^):
+echo       MQTT จะทำงานผ่าน URL เดียวกันที่ path /ws/mqtt อัตโนมัติ
 echo  ----------------------------------------------------------
 cloudflared tunnel --url http://localhost:3000
 
