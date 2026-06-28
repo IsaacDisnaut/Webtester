@@ -4,6 +4,7 @@
 const express    = require('express');
 const http       = require('http');
 const https      = require('https');
+const net        = require('net');
 const fs         = require('fs');
 const path       = require('path');
 const os         = require('os');
@@ -152,11 +153,10 @@ app.post('/api/ai', async (req, res) => {
         ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
         ...messages,
       ];
-      const groqModel = (model && model.startsWith('llama')) ? model : 'llama-3.3-70b-versatile';
       const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-        body: JSON.stringify({ model: groqModel, messages: allMsgs }),
+        body: JSON.stringify({ model: model || 'llama-3.3-70b-versatile', messages: allMsgs }),
       });
       if (!r.ok) return res.status(r.status).json({ error: await r.text() });
       text = (await r.json()).choices[0].message.content;
@@ -312,11 +312,63 @@ app.post('/api/detect', express.raw({ type: 'image/jpeg', limit: '5mb' }), async
   }
 });
 
+// ── MQTT cert generation ─────────────────────────────────────
+// Generates a self-signed cert for the local Mosquitto WSS listener (port 9443).
+// Runs once at startup; skips if cert already exists.
+async function generateMqttCerts() {
+  const CERT_DIR  = path.join(__dirname, '..', 'mosquitto', 'certs');
+  const CERT_FILE = path.join(CERT_DIR, 'cert.pem');
+  const KEY_FILE  = path.join(CERT_DIR, 'key.pem');
+  if (fs.existsSync(CERT_FILE) && fs.existsSync(KEY_FILE)) return;
+  console.log('Generating MQTT self-signed cert (one-time)…');
+  fs.mkdirSync(CERT_DIR, { recursive: true });
+  const pems = await selfsigned.generate(
+    [{ name: 'commonName', value: 'localhost' }],
+    { days: 3650, keySize: 2048 }
+  );
+  fs.writeFileSync(CERT_FILE, pems.cert, 'utf8');
+  fs.writeFileSync(KEY_FILE,  pems.private, 'utf8');
+  console.log(`MQTT certs saved → ${CERT_DIR}`);
+}
+
+// ── MQTT WebSocket proxy ──────────────────────────────────────
+// Forwards WS upgrades at /ws/mqtt → local Mosquitto plain-WS on port 9001.
+// This lets the browser use the same Cloudflare URL for both the web app and MQTT.
+// Socket.IO is configured with destroyUpgrade:false so it ignores non-socket.io paths.
+function attachMqttProxy(server) {
+  server.on('upgrade', (req, socket, head) => {
+    if (!req.url.startsWith('/ws/mqtt')) return;
+
+    const upstream = net.createConnection(9001, '127.0.0.1');
+
+    upstream.once('connect', () => {
+      let raw = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`;
+      for (const [k, v] of Object.entries(req.headers)) {
+        raw += `${k}: ${v}\r\n`;
+      }
+      raw += '\r\n';
+      upstream.write(raw);
+      if (head && head.length) upstream.write(head);
+      socket.pipe(upstream);
+      upstream.pipe(socket);
+    });
+
+    upstream.on('error', () => {
+      if (socket.writable) socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+    });
+    socket.on('error', () => upstream.destroy());
+    socket.on('close', () => upstream.destroy());
+    upstream.on('close', () => { if (!socket.destroyed) socket.destroy(); });
+  });
+}
+
 // ── Socket.io signaling ─────────────────────────────────────
 function attachSocketIO(server) {
   const io = new Server(server, {
     cors: { origin: '*' },
     transports: ['websocket', 'polling'],   // polling fallback for restrictive proxies
+    destroyUpgrade: false,                  // let /ws/mqtt upgrades pass through to our proxy
   });
 
   io.on('connection', (socket) => {
@@ -352,11 +404,19 @@ function attachSocketIO(server) {
 
 // ── Start ────────────────────────────────────────────────────
 (async () => {
+  await generateMqttCerts();
+
   if (IS_PROD) {
     // ── Production: plain HTTP, cloud platform provides HTTPS ─
     const PORT   = parseInt(process.env.PORT || '3000');
     const server = http.createServer(app);
+    attachMqttProxy(server);
     attachSocketIO(server);
+    server.on('error', (e) => {
+      if (e.code === 'EADDRINUSE') console.error(`\n[ERROR] Port ${PORT} already in use.\nRun: taskkill /F /IM node.exe\n`);
+      else console.error('[ERROR]', e.message);
+      process.exit(1);
+    });
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`VideoCall running on port ${PORT}  (production)`);
     });
@@ -394,7 +454,14 @@ function attachSocketIO(server) {
     }
 
     const httpsServer = https.createServer({ key: creds.key, cert: creds.cert }, app);
+    attachMqttProxy(httpsServer);
     attachSocketIO(httpsServer);
+
+    httpsServer.on('error', (e) => {
+      if (e.code === 'EADDRINUSE') console.error(`\n[ERROR] Port ${PORT_HTTPS} already in use.\nRun: taskkill /F /IM node.exe\n`);
+      else console.error('[ERROR]', e.message);
+      process.exit(1);
+    });
 
     httpsServer.listen(PORT_HTTPS, '0.0.0.0', () => {
       const ips = Object.values(os.networkInterfaces())

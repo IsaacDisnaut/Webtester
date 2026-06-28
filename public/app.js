@@ -183,7 +183,7 @@ const DEFAULT_SETTINGS = {
   turnUrl: '',
   turnUser: '',
   turnPass: '',
-  mqttUrl: 'wss://test.mosquitto.org:8081',
+  mqttUrl: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/mqtt`,
   mqttTopic: 'robot/control',
 };
 
@@ -195,6 +195,7 @@ function loadSettings() {
       ...DEFAULT_SETTINGS,
       ...saved,
       systemPrompt: DEFAULT_SETTINGS.systemPrompt,
+      mqttUrl: DEFAULT_SETTINGS.mqttUrl,   // always derive from current URL, never persist
     };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }
@@ -245,45 +246,43 @@ let detectLoopId  = null;  // setTimeout handle
 // ────────────────────────────────────────────────
 //  YOLO OBJECT DETECTION (via yolo_server.py)
 // ────────────────────────────────────────────────
+function startDetect() {
+  if (detectOn) return;
+  detectOn = true;
+  detectBtn.classList.remove('off');
+  detectCanvas.style.display = '';
+  runDetectionLoop();
+}
+
+function stopDetect() {
+  detectOn = false;
+  detectBtn.classList.add('off');
+  clearTimeout(detectLoopId);
+  detectCanvas.style.display = 'none';
+  if (detectCanvas.width) {
+    detectCanvas.getContext('2d').clearRect(0, 0, detectCanvas.width, detectCanvas.height);
+  }
+}
+
 function toggleDetect() {
-  detectOn = !detectOn;
-  detectBtn.classList.toggle('off', !detectOn);
-  detectCanvas.style.display = detectOn ? '' : 'none';
-
-  const localWrap  = $('local-wrap');
-  const robotPanel = $('robot-panel');
-
   if (detectOn) {
-    // Expand camera to fill the video column; hide robot panel behind it
-    localWrap.style.cssText =
-      'display:block; position:relative; width:100%; flex:1; border-radius:0; border:none;';
-    if (robotPanel) robotPanel.style.display = 'none';
-    runDetectionLoop();
+    stopDetect();
+    detectBtn.classList.add('off');
   } else {
-    clearTimeout(detectLoopId);
-    const ctx = detectCanvas.getContext('2d');
-    ctx.clearRect(0, 0, detectCanvas.width, detectCanvas.height);
-    // Restore local-wrap to its default CSS (position:absolute PiP at bottom-right)
-    localWrap.style.cssText = '';
-    // Restore robot panel in AI / robot mode
-    if (state.mode === 'ai' || state.mode === 'robot') {
-      if (robotPanel) robotPanel.style.display = 'flex';
-      localWrap.style.display = 'none';
-    }
+    startDetect();
+    detectBtn.classList.remove('off');
   }
 }
 
 async function runDetectionLoop() {
   if (!detectOn) return;
 
-  // Size canvas to match video element
   const vw = localVideo.videoWidth  || localVideo.clientWidth;
   const vh = localVideo.videoHeight || localVideo.clientHeight;
   if (vw > 0 && vh > 0) {
     detectCanvas.width  = vw;
     detectCanvas.height = vh;
 
-    // Capture frame to temp canvas (un-mirrored, as captured by camera)
     const tmp = document.createElement('canvas');
     tmp.width = vw; tmp.height = vh;
     tmp.getContext('2d').drawImage(localVideo, 0, 0, vw, vh);
@@ -303,12 +302,13 @@ async function runDetectionLoop() {
       ctx.lineWidth = 2;
 
       for (const { x1, y1, x2, y2, label, conf } of boxes) {
+        if (conf < 0.5) continue;
         const hue = Math.abs(label.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
         const color = `hsl(${hue},90%,55%)`;
         ctx.strokeStyle = color;
         ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
 
-        const tag = `${label} ${(conf * 100).toFixed(0)}%  (${Math.round((x1+x2)/2)},${Math.round((y1+y2)/2)})`;
+        const tag = `${label} ${(conf * 100).toFixed(0)}%`;
         const tw  = ctx.measureText(tag).width;
         ctx.fillStyle = color;
         ctx.fillRect(x1, y1 - 18, tw + 8, 18);
@@ -446,21 +446,28 @@ function applyMode(mode) {
     if (controlsRow) controlsRow.style.display = '';
     remoteWrap.style.display = 'none';
     localWrap.style.display  = 'none';
-    roomBar.style.display = currentRoomId ? 'block' : 'none';
+    roomBar.style.display    = currentRoomId ? 'block' : 'none';
+    detectBtn.style.display  = '';
+    stopDetect();
     if (recognition) recognition.lang = 'th-TH';
     initRobotPanel();
   } else if (mode === 'ai') {
-    robotPanel.style.display = 'flex';
+    robotPanel.style.display   = 'flex';
     if (controlsRow) controlsRow.style.display = 'none';
-    remoteWrap.style.display = 'none';
-    localWrap.style.cssText  = '';   // reset any detect-mode overrides; CSS default hides it
-    localWrap.style.display  = 'none';
+    remoteWrap.style.display   = 'none';
+    localWrap.style.cssText    = '';   // reset any detect-mode overrides
+    localWrap.style.display    = '';   // show camera PiP
+    detectCanvas.style.display = '';   // show detection overlay
+    detectBtn.style.display    = 'none';
     initRobotPanel();
+    startDetect();
   } else {
     robotPanel.style.display = 'none';
     if (controlsRow) controlsRow.style.display = '';
     remoteWrap.style.display = '';
     localWrap.style.display  = '';
+    detectBtn.style.display  = '';
+    stopDetect();
   }
 
   if (mode === 'ai') {
@@ -474,6 +481,19 @@ function applyMode(mode) {
     if (!currentRoomId) joinRoom('FACE');
     else aiAvatar.style.display = 'none';
     if (recognition) recognition.lang = 'th-TH';
+
+    // Auto-enable peer TTS so the other side hears our typed messages by default
+    if (!myTTSEnabled) {
+      myTTSEnabled = true;
+      const ttsBtn = $('peer-tts-btn');
+      if (ttsBtn) {
+        ttsBtn.classList.add('active-speech');
+        ttsBtn.title = 'ปิดเสียงข้อความของฉัน (Voice my messages: ON)';
+      }
+      if (currentRoomId && socket) socket.emit('peer-tts', { roomId: currentRoomId, enabled: true });
+      showSystemMsg('เปิดเสียงข้อความให้คู่สนทนาอัตโนมัติแล้ว — กดปุ่ม 🔊 ในหัวแชทเพื่อปิด');
+    }
+    announceAccessibility('โหมดคุยกับคน พร้อมแล้ว — กดปุ่ม Speech เพื่อเริ่มพูด');
   }
 
   if (state.speechOn && recognition) {
@@ -1179,6 +1199,15 @@ function showTypingIndicator() {
 }
 function removeTypingIndicator() { const el = $('typing-indicator'); if (el) el.remove(); }
 
+function announceAccessibility(text) {
+  if (!window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'th-TH';
+  u.volume = 1;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(u);
+}
+
 function showSystemMsg(text) {
   clearWelcome();
   const el = document.createElement('div');
@@ -1348,6 +1377,7 @@ function initSocket() {
 
   socket.on('peer-joined', (peerId) => {
     showSystemMsg('Peer joined — establishing connection…');
+    announceAccessibility('คู่สนทนาเข้าร่วมแล้ว');
     startCall(peerId, false);
   });
 
@@ -1376,6 +1406,7 @@ function initSocket() {
     peerTTSEnabled = false; // reset when peer leaves; new peer starts fresh
     setRoomStatus('Peer disconnected — waiting…', false);
     showSystemMsg('Peer left the room.');
+    announceAccessibility('คู่สนทนาออกจากห้องแล้ว');
   });
 
   socket.on('chat-message', ({ from, message }) => {
@@ -1422,6 +1453,7 @@ function createPeerConnection(peerId) {
     aiAvatar.style.display = 'none';
     remoteName.textContent = 'Peer';
     setRoomStatus('Connected ●', true);
+    announceAccessibility('เชื่อมต่อแล้ว พร้อมพูดคุย');
   };
 
   pc.onicecandidate = ({ candidate }) => {
@@ -1503,6 +1535,7 @@ function generateRoomCode() {
   setRoomStatus('Waiting for someone to join…', false);
   aiAvatar.style.display = 'none';
   remoteName.textContent = 'Waiting for peer…';
+  announceAccessibility(`รหัสห้องของคุณคือ ${code.split('').join(' ')}`);
 }
 
 function joinRoom(code) {
@@ -1529,7 +1562,6 @@ function endCall() {
   Object.keys(peers).forEach(cleanupPeer);
 
   if (state.mode === 'ai') {
-    aiAvatar.style.display = 'flex';
     remoteName.textContent = 'AI Assistant';
     aiHistory.length = 0;
     showSystemMsg('Conversation reset.');
