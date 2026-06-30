@@ -1,1 +1,1 @@
-***Run start-local.bat ***
+Run start-local.bat
