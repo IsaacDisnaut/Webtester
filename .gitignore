@@ -8,3 +8,8 @@ videocall.db-wal
 apikey
 tempCodeRunnerFile.py
 __pycache__/
+
+# heavy binaries / third-party downloads / editor config — not pushed
+*.pt
+inmoov_urdf-master/
+.vscode/

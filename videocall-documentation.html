@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>VideoCall Web App — Documentation</title>
+<style>
+  /* ── Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 13pt;
+    line-height: 1.65;
+    color: #1a1a2e;
+    background: #fff;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 48px;
+  }
+
+  /* ── Typography ── */
+  h1 { font-size: 28pt; font-weight: 800; color: #0f172a; margin-bottom: 6px; }
+  h2 { font-size: 16pt; font-weight: 700; color: #1e40af; margin: 36px 0 10px; border-bottom: 2px solid #dbeafe; padding-bottom: 4px; }
+  h3 { font-size: 12pt; font-weight: 700; color: #1e3a8a; margin: 22px 0 6px; }
+  h4 { font-size: 11pt; font-weight: 600; color: #374151; margin: 14px 0 4px; }
+  p  { margin-bottom: 10px; }
+  ul, ol { margin: 8px 0 10px 24px; }
+  li { margin-bottom: 4px; }
+  a  { color: #2563eb; }
+
+  /* ── Code ── */
+  code {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 10.5pt;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 1px 5px;
+    white-space: nowrap;
+  }
+  pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 16px 18px;
+    font-size: 9.5pt;
+    font-family: 'Consolas', 'Courier New', monospace;
+    overflow-x: auto;
+    margin: 12px 0;
+    line-height: 1.55;
+  }
+  pre code { background: none; border: none; padding: 0; color: inherit; white-space: pre; }
+
+  /* ── Cover ── */
+  .cover {
+    text-align: center;
+    padding: 60px 0 50px;
+    border-bottom: 3px solid #1e40af;
+    margin-bottom: 36px;
+  }
+  .cover .subtitle { font-size: 13pt; color: #64748b; margin-top: 8px; }
+  .cover .badge {
+    display: inline-block;
+    margin: 18px 4px 0;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 9pt;
+    font-weight: 600;
+    background: #dbeafe;
+    color: #1e40af;
+  }
+
+  /* ── Info box ── */
+  .info { background: #eff6ff; border-left: 4px solid #3b82f6; border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 14px 0; }
+  .warn { background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 14px 0; }
+
+  /* ── File table ── */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 11pt; }
+  th { background: #1e40af; color: #fff; padding: 8px 12px; text-align: left; font-weight: 600; }
+  td { padding: 7px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  td:first-child { font-family: 'Consolas', monospace; font-size: 10pt; white-space: nowrap; }
+
+  /* ── Architecture diagram ── */
+  .arch {
+    font-family: 'Consolas', monospace;
+    font-size: 9.5pt;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin: 14px 0;
+    line-height: 1.7;
+    white-space: pre;
+  }
+
+  /* ── Flow step ── */
+  .step { display: flex; gap: 14px; margin: 10px 0; align-items: flex-start; }
+  .step-num {
+    min-width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #1e40af; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10pt; font-weight: 700; flex-shrink: 0; margin-top: 2px;
+  }
+  .step-body { flex: 1; }
+
+  /* ── Print ── */
+  @media print {
+    body { padding: 20px 28px; font-size: 11pt; max-width: 100%; }
+    h2 { page-break-before: always; }
+    .cover { page-break-after: always; padding: 80px 0; }
+    pre, table, .arch { page-break-inside: avoid; }
+    @page { margin: 18mm 16mm; size: A4; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════ COVER -->
+<div class="cover">
+  <h1>VideoCall Web App</h1>
+  <div class="subtitle">Technical Documentation — Project DeepdarkFamtasy</div>
+  <div>
+    <span class="badge">Node.js</span>
+    <span class="badge">WebRTC</span>
+    <span class="badge">Socket.io</span>
+    <span class="badge">Three.js</span>
+    <span class="badge">MQTT</span>
+    <span class="badge">Railway</span>
+  </div>
+  <p style="margin-top:28px; color:#64748b; font-size:11pt;">
+    Prepared June 2026 &nbsp;|&nbsp; Repository: <strong>IsaacDisnaut/Webtester</strong>
+  </p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ 1. OVERVIEW -->
+<h2>1. What This Application Does</h2>
+<p>
+  This is a <strong>browser-based video communication platform</strong> with two modes of use:
+</p>
+<ul>
+  <li><strong>Person-to-Person Video Call</strong> — two people join the same room code and talk face-to-face using their cameras and microphones.</li>
+  <li><strong>Robot Control Mode</strong> — one person controls an <em>InMoov</em> humanoid robot head in real time. A 3D model of the robot head is displayed and animated. Commands (head rotation, jaw, eye movement) are sent to a physical robot over MQTT.</li>
+</ul>
+<p>
+  Additional features include real-time text chat, AI assistant integration (Anthropic Claude or OpenAI), and automatic speech-to-text / text-to-speech so conversations can be read aloud or transcribed.
+</p>
+
+<!-- ══════════════════════════════════════════════════════════ 2. ARCHITECTURE -->
+<h2>2. System Architecture</h2>
+<div class="arch">
+┌─────────────────────────────────────────────────────────────┐
+│                        BROWSER (User A)                     │
+│  index.html + style.css + app.js + robot-viewer.js          │
+│                                                             │
+│   ┌──────────────┐   WebRTC   ┌──────────────────────────┐  │
+│   │  Video/Audio │◄──────────►│   Video/Audio (User B)   │  │
+│   │  Peer Track  │            └──────────────────────────┘  │
+│   └──────────────┘                                          │
+│          │  Socket.io (signaling)                           │
+│          ▼                                                  │
+│   ┌─────────────────────────┐    ┌──────────────────────┐  │
+│   │     server.js           │    │  MQTT Broker         │  │
+│   │  Express + Socket.io    │    │  (Mosquitto/Cloud)   │  │
+│   │  Railway / Docker       │    │  topic: robot/control│  │
+│   └─────────────────────────┘    └──────────────────────┘  │
+│          │ HTTP REST                         ▲              │
+│          │ /api/ai     ┌─────────────────────┘              │
+│          │ /api/ice    │  MQTT.js (browser → broker direct) │
+│          │ /api/session│                                     │
+│          ▼             │                                     │
+│   ┌─────────────────┐  │  ┌────────────────────────────┐   │
+│   │  Anthropic /    │  │  │  3D Robot Head Viewer      │   │
+│   │  OpenAI API     │  │  │  Three.js + STL meshes     │   │
+│   └─────────────────┘  │  │  URDF joint animation      │   │
+│                         │  └────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+</div>
+<p>
+  The server acts only as a <strong>signaling relay</strong> — it never touches the actual audio or video stream.
+  Once two peers exchange connection details (ICE candidates + SDP offer/answer), their video streams flow
+  directly between browsers over WebRTC.
+</p>
+
+<!-- ══════════════════════════════════════════════════════════ 3. FILES -->
+<h2>3. File Structure &amp; Purpose</h2>
+
+<h3>3.1 Root Files</h3>
+<table>
+  <tr><th>File</th><th>Purpose</th></tr>
+  <tr><td>server.js</td><td>Main Node.js server. Hosts the Express HTTP server, Socket.io signaling, REST API endpoints, and SQLite session tracking.</td></tr>
+  <tr><td>package.json</td><td>Node.js project manifest. Lists dependencies: <code>express</code>, <code>socket.io</code>, <code>better-sqlite3</code>, <code>selfsigned</code>.</td></tr>
+  <tr><td>Dockerfile</td><td>Container build instructions for deploying on Railway. Installs build tools needed by the native SQLite addon, then copies and runs the app.</td></tr>
+  <tr><td>.gitignore</td><td>Excludes <code>node_modules/</code>, SSL certificates, the SQLite database file, and <code>.env</code> from version control.</td></tr>
+  <tr><td>.dockerignore</td><td>Excludes the same files from being copied into the Docker image.</td></tr>
+</table>
+
+<h3>3.2 Public Frontend Files</h3>
+<table>
+  <tr><th>File</th><th>Purpose</th></tr>
+  <tr><td>public/index.html</td><td>Single HTML page for the entire app. Contains the login screen, video call view, chat panel, and robot control panel. All views are hidden/shown via CSS classes.</td></tr>
+  <tr><td>public/style.css</td><td>All visual styling: dark theme, layout grid, video panels, chat bubbles, D-pad buttons, joystick, robot panel, and responsive breakpoints.</td></tr>
+  <tr><td>public/app.js</td><td>Main frontend logic (~520 lines). Handles room joining, WebRTC peer connection, chat, speech recognition/synthesis, AI requests, robot state, D-pad input, joystick input, and MQTT publishing.</td></tr>
+  <tr><td>public/robot-viewer.js</td><td>3D robot head viewer built with Three.js. Parses the URDF file, loads STL meshes, builds a joint hierarchy, and provides a <code>setJoint(name, angle)</code> API to animate joints.</td></tr>
+</table>
+
+<h3>3.3 Robot Model Files</h3>
+<table>
+  <tr><th>File</th><th>Purpose</th></tr>
+  <tr><td>public/robot/head.urdf</td><td>URDF (Unified Robot Description Format) XML file describing the InMoov head's link–joint hierarchy: neck, rothead (head shell), jaw, left eye, right eye. Defines joint axes, limits, and which STL mesh each part uses.</td></tr>
+  <tr><td>public/robot/meshes/Texture011.stl</td><td>Left eye ball 3D mesh.</td></tr>
+  <tr><td>public/robot/meshes/Texture012.stl</td><td>Right eye ball 3D mesh.</td></tr>
+  <tr><td>public/robot/meshes/Texture013.stl</td><td>Main head shell (rothead) — primary material zone.</td></tr>
+  <tr><td>public/robot/meshes/Texture014.stl</td><td>Jaw mesh.</td></tr>
+  <tr><td>public/robot/meshes/Texture015.stl</td><td>Neck hinge mesh.</td></tr>
+  <tr><td>public/robot/meshes/Texture068–082.stl</td><td>15 additional material zones of the head shell (different surface areas exported separately from Blender for colour/material variation).</td></tr>
+  <tr><td>public/robot/meshes/Texture083–085.stl</td><td>Additional neck material zones.</td></tr>
+  <tr><td>public/robot/meshes/Texture086–087.stl</td><td>Additional jaw material zones.</td></tr>
+</table>
+
+<div class="info">
+  <strong>Why so many STL files?</strong> The InMoov head was originally modelled in Blender with multiple material slots.
+  When exported to STL (which has no material support), each material zone becomes a separate file.
+  Three.js loads each file independently and assigns a <code>MeshPhongMaterial</code> with the matching colour.
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ 4. SERVER -->
+<h2>4. Server — server.js</h2>
+<p>The server has four responsibilities:</p>
+
+<h3>4.1 Static File Serving</h3>
+<p><code>express.static('public')</code> serves all HTML, CSS, JS, URDF, and STL files directly to the browser. No templating engine is needed.</p>
+
+<h3>4.2 REST API Endpoints</h3>
+<table>
+  <tr><th>Endpoint</th><th>Method</th><th>What it does</th></tr>
+  <tr><td>/api/ai</td><td>POST</td><td>Proxies a chat request to Anthropic Claude or OpenAI. The browser sends its API key; the server forwards it and returns the AI reply. This avoids CORS issues from calling AI APIs directly in the browser.</td></tr>
+  <tr><td>/api/ice-config</td><td>GET</td><td>Returns a list of STUN/TURN servers for WebRTC ICE negotiation (Google STUN + OpenRelay TURN).</td></tr>
+  <tr><td>/api/session/start</td><td>POST</td><td>Records a new user session in SQLite with the user's name and login time.</td></tr>
+  <tr><td>/api/session/end</td><td>POST</td><td>Updates the session record with usage time and logout time.</td></tr>
+  <tr><td>/api/session/end-beacon</td><td>POST</td><td>Same as above but designed to be called by <code>navigator.sendBeacon()</code> when the browser tab is closed.</td></tr>
+  <tr><td>/api/sessions</td><td>GET</td><td>Returns the last 200 session records (for admin review).</td></tr>
+</table>
+
+<h3>4.3 Socket.io Signaling</h3>
+<p>WebRTC requires an out-of-band signaling channel to exchange connection setup messages. Socket.io provides this real-time relay:</p>
+<ul>
+  <li><strong>join-room</strong> — A peer announces they want to join a specific room code.</li>
+  <li><strong>room-joined</strong> — Server replies with the list of existing peers in that room.</li>
+  <li><strong>peer-joined / peer-left</strong> — Broadcast to the room when someone arrives or leaves.</li>
+  <li><strong>signal</strong> — Relay WebRTC SDP offers/answers and ICE candidates between peers.</li>
+  <li><strong>chat-message</strong> — Relay text chat messages within the room.</li>
+  <li><strong>peer-tts</strong> — Relay whether the peer has auto-read (TTS) enabled.</li>
+</ul>
+
+<h3>4.4 Development vs Production Mode</h3>
+<p>
+  In <strong>development</strong> (<code>NODE_ENV</code> not set), the server generates a self-signed HTTPS certificate and runs on port 3443.
+  HTTPS is required for <code>getUserMedia()</code> (camera/microphone access) in browsers.
+</p>
+<p>
+  In <strong>production</strong> (Railway), <code>NODE_ENV=production</code> is set automatically. The server runs plain HTTP on port 3000
+  because Railway's edge proxy handles HTTPS termination.
+</p>
+
+<!-- ══════════════════════════════════════════════════════════ 5. FRONTEND -->
+<h2>5. Frontend — app.js</h2>
+
+<h3>5.1 Login &amp; Room System</h3>
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body">User enters their name and a <strong>room code</strong>. Any two people who type the same room code will be connected to each other.</div>
+</div>
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body">The browser emits <code>join-room</code> over Socket.io. The server records the session start in SQLite.</div>
+</div>
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body">If another peer is already in the room, <code>room-joined</code> returns their socket ID and the WebRTC handshake begins automatically.</div>
+</div>
+
+<h3>5.2 WebRTC Connection Flow</h3>
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body"><strong>Offer</strong> — The first peer creates a WebRTC <code>RTCPeerConnection</code>, adds camera/mic tracks, generates an SDP offer, and sends it via Socket.io <code>signal</code>.</div>
+</div>
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body"><strong>Answer</strong> — The second peer receives the offer, creates its own connection, and sends back an SDP answer.</div>
+</div>
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body"><strong>ICE Candidates</strong> — Both sides send network path candidates to each other. The browser tries each candidate (local network, STUN-discovered public IP, TURN relay) until a working path is found.</div>
+</div>
+<div class="step">
+  <div class="step-num">4</div>
+  <div class="step-body"><strong>Stream flows</strong> — Once ICE negotiation succeeds, audio/video travels directly peer-to-peer. The server is no longer involved in the media stream.</div>
+</div>
+
+<h3>5.3 Speech — STT &amp; TTS</h3>
+<ul>
+  <li><strong>Speech-to-Text (STT)</strong> — Uses the browser's built-in <code>SpeechRecognition</code> API (Web Speech API). When active, the user's spoken words appear in the chat input box in real time.</li>
+  <li><strong>Text-to-Speech (TTS)</strong> — Uses <code>speechSynthesis.speak()</code>. When "Auto-Read" is enabled, incoming chat messages from the peer are read aloud automatically.</li>
+</ul>
+<div class="warn">
+  <strong>Mobile limitation:</strong> The Web Speech API requires HTTPS and a stable internet connection. On some mobile browsers (especially Android), <code>SpeechRecognition</code> may not work due to network restrictions. The app shows a "Speech network error" warning if this happens.
+</div>
+
+<h3>5.4 AI Chat Integration</h3>
+<p>The settings panel allows entering an API key for either <strong>Anthropic Claude</strong> or <strong>OpenAI</strong>. When a message is sent in AI mode:</p>
+<ul>
+  <li>The full conversation history is sent to <code>POST /api/ai</code> on the server.</li>
+  <li>The server forwards it to the chosen AI provider and returns the reply.</li>
+  <li>The reply appears in the chat as an "AI" message bubble.</li>
+  <li>A custom system prompt can be configured to change the AI's persona.</li>
+</ul>
+
+<!-- ══════════════════════════════════════════════════════════ 6. ROBOT -->
+<h2>6. Robot Control Panel</h2>
+
+<h3>6.1 Overview</h3>
+<p>
+  The Robot Control tab shows a 3D animated model of an <strong>InMoov humanoid robot head</strong>.
+  Controls let the operator move the head, open/close the mouth, and move the eyes.
+  These movements are mirrored on the 3D model <em>and</em> sent as MQTT commands to a physical robot.
+</p>
+
+<h3>6.2 Controls</h3>
+<table>
+  <tr><th>Control</th><th>Action</th><th>Robot Joint</th></tr>
+  <tr><td>D-pad ◄ / ►</td><td>Rotate head left / right</td><td>rothead_link_joint (Z-axis, ±35°)</td></tr>
+  <tr><td>D-pad ▼ / ▲</td><td>Open / close mouth</td><td>jaw_link_joint (X-axis, 0–10°)</td></tr>
+  <tr><td>D-pad center ⦿</td><td>Reset all joints to zero</td><td>All joints → 0</td></tr>
+  <tr><td>Joystick X-axis</td><td>Pan both eyes left / right</td><td>eyeLeft/Right.001_link_joint (Z-axis, ±20°)</td></tr>
+  <tr><td>Joystick Y-axis</td><td>Tilt both eyes up / down</td><td>eyeLeft/Right_link_joint (X-axis, ±20°)</td></tr>
+</table>
+
+<h3>6.3 How the 3D Viewer Works (robot-viewer.js)</h3>
+<div class="step">
+  <div class="step-num">1</div>
+  <div class="step-body"><strong>URDF Parse</strong> — The browser fetches <code>/robot/head.urdf</code> and parses it with <code>DOMParser</code> (no ROS required). It extracts all <code>&lt;link&gt;</code> and <code>&lt;joint&gt;</code> elements.</div>
+</div>
+<div class="step">
+  <div class="step-num">2</div>
+  <div class="step-body"><strong>STL Load</strong> — For each <code>&lt;visual&gt;</code> element found inside each link, <code>THREE.STLLoader</code> loads the matching STL file from <code>/robot/meshes/</code>. Each mesh is added to a Three.js <code>Group</code> representing that link.</div>
+</div>
+<div class="step">
+  <div class="step-num">3</div>
+  <div class="step-body"><strong>Joint Hierarchy</strong> — Each joint creates two nested Groups: an <em>origin group</em> (fixed position offset from parent) and a <em>pivot group</em> (rotates to simulate joint movement). The child link's meshes sit inside the pivot group.</div>
+</div>
+<div class="step">
+  <div class="step-num">4</div>
+  <div class="step-body"><strong>Coordinate System</strong> — URDF uses Z-up coordinates (Blender convention). Three.js uses Y-up. The root group is rotated <code>−90°</code> around X to convert between them.</div>
+</div>
+<div class="step">
+  <div class="step-num">5</div>
+  <div class="step-body"><strong>Scale</strong> — Mesh vertices are in Blender units (~8.33× centimetres). A scale factor of <code>0.1196</code> (from the InMoov model's <code>properties.xacro</code>) is applied to the root group so the head measures approximately 1.80 m tall at full-body scale.</div>
+</div>
+<div class="step">
+  <div class="step-num">6</div>
+  <div class="step-body"><strong>Animation</strong> — When <code>setJoint(name, angle)</code> is called, the pivot group's quaternion is updated with <code>setFromAxisAngle(axis, clampedAngle)</code>. A <code>requestAnimationFrame</code> loop re-renders the scene at 60 fps.</div>
+</div>
+
+<h3>6.4 MQTT Publishing</h3>
+<p>Every time the robot state changes, the browser publishes a JSON message directly to the MQTT broker using the <strong>MQTT.js</strong> library (loaded from CDN). The format is:</p>
+<pre><code>{
+  "Pad":    "left" | "right" | "up" | "down" | null,
+  "Analog": { "x": -1.0…1.0, "y": -1.0…1.0 }
+}</code></pre>
+<p>
+  The MQTT broker address and topic are configurable in the app's settings panel.
+  The physical robot's control software subscribes to the same topic and actuates the servos accordingly.
+</p>
+
+<h3>6.5 InMoov Model File Origin</h3>
+<p>
+  The STL mesh files and URDF joint definitions come from the open-source
+  <strong>inmoov_urdf-master</strong> project (CC BY-NC 4.0 licence, original creator: Gaël Langevin / <em>inmoov.fr</em>).
+  Only the head assembly is included. The URDF was extracted from
+  <code>inmoov_urdf-master/archive/urdf/InMoov.urdf</code> and stripped down to the head joints only.
+</p>
+
+<!-- ══════════════════════════════════════════════════════════ 7. DEPLOYMENT -->
+<h2>7. Deployment on Railway</h2>
+
+<h3>7.1 How It Works</h3>
+<p>
+  The application is deployed as a <strong>Docker container on Railway</strong>.
+  Railway automatically detects the <code>Dockerfile</code>, builds the image, and runs it on every push to the <code>main</code> branch of the GitHub repository.
+</p>
+
+<h3>7.2 Dockerfile Explained</h3>
+<pre><code>FROM node:20-slim
+# Install C++ build tools required by better-sqlite3 (native addon)
+RUN apt-get update && apt-get install -y python3 make g++
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev      # install production dependencies only
+
+COPY . .                   # copy all source files
+ENV NODE_ENV=production    # enables production mode in server.js
+EXPOSE 3000
+CMD ["node", "server.js"]</code></pre>
+
+<h3>7.3 Environment Variables</h3>
+<table>
+  <tr><th>Variable</th><th>Default</th><th>Purpose</th></tr>
+  <tr><td>NODE_ENV</td><td>production</td><td>Switches between dev (HTTPS + self-signed cert) and prod (plain HTTP behind Railway proxy).</td></tr>
+  <tr><td>PORT</td><td>3000</td><td>Port the HTTP server listens on (Railway sets this automatically).</td></tr>
+  <tr><td>DB_PATH</td><td>./videocall.db</td><td>Path to the SQLite database file. Set to a persistent volume path (e.g. <code>/data/videocall.db</code>) to keep session history across deploys.</td></tr>
+  <tr><td>TURN_URL</td><td>(none)</td><td>Optional custom TURN server URL for WebRTC relay (for networks that block peer-to-peer).</td></tr>
+  <tr><td>TURN_USER</td><td>(none)</td><td>TURN server username.</td></tr>
+  <tr><td>TURN_PASS</td><td>(none)</td><td>TURN server password.</td></tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════ 8. DATA FLOW -->
+<h2>8. Full Data Flow Summary</h2>
+<div class="arch">
+User opens browser
+    │
+    ├─► GET / → server returns index.html
+    ├─► GET /style.css, /app.js, /robot-viewer.js  (static files)
+    ├─► GET /robot/head.urdf                        (robot description)
+    └─► GET /robot/meshes/Texture0NN.stl × 25      (3D mesh files)
+
+User logs in (name + room code)
+    │
+    ├─► POST /api/session/start  → SQLite INSERT
+    └─► Socket.io: emit('join-room', roomCode)
+              │
+              └─► Server: broadcast peer-joined to room
+
+WebRTC Handshake (via Socket.io signals)
+    │
+    ├─► Peer A creates offer  → signal → Peer B
+    ├─► Peer B creates answer → signal → Peer A
+    └─► ICE candidates exchanged → direct P2P stream established
+
+During call
+    ├─► Video/Audio: flows directly peer-to-peer (no server)
+    ├─► Chat text:   Socket.io chat-message relay via server
+    ├─► AI replies:  POST /api/ai → Anthropic/OpenAI → response
+    └─► Robot cmds:  MQTT publish from browser → MQTT broker
+                          → physical robot subscribes
+
+User leaves tab
+    └─► navigator.sendBeacon('/api/session/end-beacon') → SQLite UPDATE
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ 9. DEPENDENCIES -->
+<h2>9. Third-Party Dependencies</h2>
+
+<h3>9.1 Server (npm)</h3>
+<table>
+  <tr><th>Package</th><th>Version</th><th>Purpose</th></tr>
+  <tr><td>express</td><td>^4.18</td><td>HTTP server framework. Handles routing and static file serving.</td></tr>
+  <tr><td>socket.io</td><td>^4.7</td><td>WebSocket library for real-time signaling between browser and server.</td></tr>
+  <tr><td>better-sqlite3</td><td>^12.10</td><td>Fast, synchronous SQLite driver for Node.js. Used for session tracking.</td></tr>
+  <tr><td>selfsigned</td><td>^5.5</td><td>Generates a self-signed SSL certificate for local HTTPS development.</td></tr>
+</table>
+
+<h3>9.2 Browser (CDN)</h3>
+<table>
+  <tr><th>Library</th><th>Version</th><th>Purpose</th></tr>
+  <tr><td>socket.io-client</td><td>4.7.2</td><td>Browser side of Socket.io for real-time server communication.</td></tr>
+  <tr><td>three.js</td><td>0.134.0</td><td>WebGL 3D graphics library used to render the robot head model.</td></tr>
+  <tr><td>three/STLLoader</td><td>0.134.0</td><td>Three.js add-on that parses binary/ASCII STL files into 3D geometry.</td></tr>
+  <tr><td>three/OrbitControls</td><td>0.134.0</td><td>Three.js add-on that lets the user rotate and zoom the 3D view with mouse/touch.</td></tr>
+  <tr><td>mqtt.js</td><td>CDN latest</td><td>MQTT client for the browser. Publishes robot control commands to the MQTT broker over WebSocket.</td></tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════ 10. GLOSSARY -->
+<h2>10. Glossary</h2>
+<table>
+  <tr><th>Term</th><th>Meaning</th></tr>
+  <tr><td>WebRTC</td><td>Web Real-Time Communication — a browser standard for direct peer-to-peer audio/video without plugins.</td></tr>
+  <tr><td>ICE</td><td>Interactive Connectivity Establishment — the process of finding a working network path between two peers.</td></tr>
+  <tr><td>STUN</td><td>Session Traversal Utilities for NAT — a server that tells a browser its public IP address so peers can find each other.</td></tr>
+  <tr><td>TURN</td><td>Traversal Using Relays around NAT — a fallback relay server used when direct peer-to-peer is blocked by a firewall.</td></tr>
+  <tr><td>SDP</td><td>Session Description Protocol — a text format describing the media capabilities (codecs, resolution) of each WebRTC peer.</td></tr>
+  <tr><td>Socket.io</td><td>A WebSocket-based library that enables real-time bidirectional events between browser and server.</td></tr>
+  <tr><td>MQTT</td><td>Message Queuing Telemetry Transport — a lightweight publish/subscribe messaging protocol widely used in IoT and robotics.</td></tr>
+  <tr><td>URDF</td><td>Unified Robot Description Format — an XML file format that describes a robot's physical structure (links and joints).</td></tr>
+  <tr><td>STL</td><td>Stereolithography — a 3D mesh file format describing geometry as a list of triangles. Used for robot mesh files.</td></tr>
+  <tr><td>Three.js</td><td>A JavaScript library that makes WebGL 3D graphics accessible in the browser without writing raw GPU shader code.</td></tr>
+  <tr><td>InMoov</td><td>An open-source 3D-printable humanoid robot designed by Gaël Langevin (inmoov.fr).</td></tr>
+  <tr><td>Railway</td><td>A cloud hosting platform that deploys Docker containers automatically from a GitHub repository.</td></tr>
+  <tr><td>SQLite</td><td>A lightweight, file-based relational database. Used here to log user session records without needing a separate database server.</td></tr>
+</table>
+
+<p style="margin-top:48px; color:#94a3b8; font-size:9.5pt; text-align:center; border-top:1px solid #e2e8f0; padding-top:16px;">
+  VideoCall Web App Documentation &nbsp;|&nbsp; DeepdarkFamtasy &nbsp;|&nbsp; June 2026
+</p>
+</body>
+</html>
