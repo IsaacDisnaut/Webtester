@@ -310,7 +310,7 @@ Drives the Three.js URDF viewer joints:
 #### `applyRobotPayload(str)`
 Parses a JSON string. If it has `Head`, `Mouth`, or `Analog` keys, updates `robotState` and calls `updateRobotModel()`. Returns `true` on success. Used by both MQTT and WebRTC data channel to avoid treating robot commands as chat messages.
 
-Mapping: `Head` 20-150 → `headAngle = Head - 65`. `Mouth` 20-150 → `mouthOpen = (Mouth - 20) / 130`. `Analog.x/y` → direct.
+Mapping (canonical wire format, mode-independent): `Head` 0-80 → `headAngle = Head - 40`. `Mouth` 30-100 → `mouthOpen = (Mouth - 30) / 70`. `Analog.x/y` → direct (clamped -1..1).
 
 #### `playEmotionSequence(str)`
 Accepts JSON array or single object. Plays frames sequentially with 800 ms `setTimeout` between them. Cancels any in-progress sequence first.
@@ -560,12 +560,12 @@ Sets `chatInput` height to `scrollHeight` capped at 120 px.
 ## Wire format — Robot emotion JSON
 
 ```json
-{ "Head": 45, "Mouth": 30, "Analog": { "x": 0.0, "y": 0.0 } }
+{ "Head": 40, "Mouth": 30, "Analog": { "x": 0.0, "y": 0.0 } }
 ```
 
 | Field | Range | Meaning |
 |---|---|---|
-| `Head` | 20–150 (center ≈ 65) | Servo degrees for head rotation (20 = left, 100 = right) |
+| `Head` | 0–80 (center 40) | Servo degrees for head rotation (0 = left, 80 = right) |
 | `Mouth` | 30–100 | Jaw servo (30 = closed, 100 = open/smile) |
 | `Analog.x` | -1..1 | Eye pan (left/right) |
 | `Analog.y` | -1..1 | Eye tilt (up/down) |

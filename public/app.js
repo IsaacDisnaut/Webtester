@@ -117,7 +117,7 @@ function initLoginScreen() {
     errorEl.textContent = '';
     input.classList.remove('error');
     if (!name) {
-      errorEl.textContent = 'Please enter your name.';
+      errorEl.textContent = 'กรุณากรอกชื่อของคุณ';
       input.classList.add('error');
       input.focus();
       return;
@@ -125,7 +125,7 @@ function initLoginScreen() {
 
     // Show loading state
     btn.disabled = true;
-    btnText.textContent = 'Starting…';
+    btnText.textContent = 'กำลังเริ่ม…';
 
     try {
       await doLogin(name);
@@ -137,9 +137,9 @@ function initLoginScreen() {
         initApp();
       }, { once: true });
     } catch (err) {
-      errorEl.textContent = err.message || 'Could not connect. Try again.';
+      errorEl.textContent = err.message || 'เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่';
       btn.disabled = false;
-      btnText.textContent = 'Get Started';
+      btnText.textContent = 'เริ่มใช้งาน';
     }
   });
 }
@@ -171,15 +171,19 @@ let currentRoomId = null;
 //  SETTINGS
 // ════════════════════════════════════════════════
 const DEFAULT_SETTINGS = {
+  showAiMode: false,      // "Talk with AI" nav tab is hidden by default; enable from Settings
+  showDetectButton: false, // YOLO "ตรวจจับ" toggle is a debug feature, hidden by default; enable from Settings
+  showTimingLog: false,    // per-message STT/AI timing breakdown is a debug feature, hidden by default
+  dpadSpeed: '1',          // D-pad head/mouth step multiplier: '0.5' slow, '1' normal, '1.5' fast
+  remoteRotation: '0',     // rotate incoming remote video display: '0' | '90' | '180' | '270'
   provider: 'groq',
   baseUrl: 'https://api.groq.com/openai/v1',
   apiKey: '',
   model: 'llama-3.3-70b-versatile',
-  systemPrompt: 'You are a male Thai robot. You mainly speak Thai as your native language. You can move your face left-right, move both eyes, and open/close your mouth. In EVERY response include emotion JSON blocks to animate your face, placed anywhere in your message, using EXACTLY this format: {"Head":45,"Mouth":30,"Analog":{"x":0,"y":0}}\nRanges: Head 20-100 (20=look left,45=center, 100=look right), Mouth 30-100 (30=closed, 100=open/smile), Analog x -1 to 1 (eye pan), y -1 to 1 (eye tilt). Include as many frames as needed to make the animation feel natural (e.g. approach → peak → settle).',
-  sttMode: 'whisper',
+  systemPrompt: 'You are a male Thai robot. You mainly speak Thai as your native language. You can move your face left-right, move both eyes, and open/close your mouth. In EVERY response include emotion JSON blocks to animate your face, placed anywhere in your message, using EXACTLY this format: {"Head":40,"Mouth":30,"Analog":{"x":0,"y":0}}\nRanges: Head 0-80 (0=look left, 40=center, 80=look right), Mouth 30-100 (30=closed, 100=open/smile), Analog x -1 to 1 (eye pan), y -1 to 1 (eye tilt). Include as many frames as needed to make the animation feel natural (e.g. approach → peak → settle).',
+  sttMode: 'browser',
   ttsEnabled: true,
   ttsRate: 1.0,
-  voiceGender: 'male',
   turnUrl: '',
   turnUser: '',
   turnPass: '',
@@ -191,10 +195,12 @@ function loadSettings() {
   try {
     const s = localStorage.getItem('vc_settings');
     const saved = s ? JSON.parse(s) : {};
+    // Migrate: prompts saved before the wire-format canonicalization still
+    // instruct the old Head 20-100 / center-45 ranges — swap in the new default.
+    if (saved.systemPrompt && /Head 20-100|"Head":45/.test(saved.systemPrompt)) delete saved.systemPrompt;
     return {
       ...DEFAULT_SETTINGS,
-      ...saved,
-      systemPrompt: DEFAULT_SETTINGS.systemPrompt,
+      ...saved,   // systemPrompt persists — the Settings form lets the user edit it
       mqttUrl: DEFAULT_SETTINGS.mqttUrl,   // always derive from current URL, never persist
     };
   } catch { return { ...DEFAULT_SETTINGS }; }
@@ -238,6 +244,14 @@ const copyCodeBtn      = $('copy-code-btn');
 const speechIndicator  = $('speech-indicator');
 const settingsOverlay  = $('settings-overlay');
 const detectBtn        = $('detect-btn');
+const faceWaitingStatus = $('face-waiting-status');
+
+// Only meaningful on the /face kiosk screen — lets the customer know whether
+// an operator is connected yet, instead of a silently idle robot head.
+function setFaceWaitingVisible(show) {
+  if (!IS_FACE || !faceWaitingStatus) return;
+  faceWaitingStatus.classList.toggle('visible', show);
+}
 const detectCanvas     = $('detect-canvas');
 
 let detectOn      = false;
@@ -250,6 +264,7 @@ function startDetect() {
   if (detectOn) return;
   detectOn = true;
   detectBtn.classList.remove('off');
+  detectBtn.setAttribute('aria-pressed', 'true');
   detectCanvas.style.display = '';
   runDetectionLoop();
 }
@@ -257,6 +272,7 @@ function startDetect() {
 function stopDetect() {
   detectOn = false;
   detectBtn.classList.add('off');
+  detectBtn.setAttribute('aria-pressed', 'false');
   clearTimeout(detectLoopId);
   detectCanvas.style.display = 'none';
   if (detectCanvas.width) {
@@ -267,10 +283,8 @@ function stopDetect() {
 function toggleDetect() {
   if (detectOn) {
     stopDetect();
-    detectBtn.classList.add('off');
   } else {
     startDetect();
-    detectBtn.classList.remove('off');
   }
 }
 
@@ -302,7 +316,7 @@ async function runDetectionLoop() {
       ctx.lineWidth = 2;
 
       for (const { x1, y1, x2, y2, label, conf } of boxes) {
-        if (conf < 0.5) continue;
+        // confidence filtering happens server-side (yolo_server.py CONF_THRESHOLD)
         const hue = Math.abs(label.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
         const color = `hsl(${hue},90%,55%)`;
         ctx.strokeStyle = color;
@@ -352,12 +366,22 @@ async function initApp() {
 
   if (IS_FACE) {
     document.body.classList.add('face-mode');
+    setFaceWaitingVisible(true); // shown until an operator's media actually connects
     joinRoom('FACE');    // must be before applyMode so currentRoomId is set
     applyMode('robot');
+    // The kiosk must BOTH stream mic audio to the operator AND transcribe.
+    // On Android, Web Speech API can't share the mic with WebRTC — Whisper
+    // records via its own second getUserMedia stream, which can. Runtime
+    // override only (not persisted): desktop keeps the configured mode since
+    // Web Speech coexists with the open mic there.
+    if (IS_MOBILE) settings.sttMode = 'whisper';
+    toggleSpeech();      // kiosk display has no one to click the Speech button
   } else {
-    applyMode('ai');
-    showSystemMsg(`Welcome, ${currentUserName}!`);
+    applyAiModeVisibility();
+    applyMode(settings.showAiMode ? 'ai' : 'person');
+    showSystemMsg(`ยินดีต้อนรับ, ${currentUserName}!`);
     if (settings.mqttUrl) connectMQTT(); // connect early so emotion publishes work in AI mode
+    initKeyboardControls();
   }
 }
 
@@ -399,11 +423,11 @@ async function startLocalMedia() {
     console.warn('Media error:', e);
     camPlaceholder.classList.add('visible');
     if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-      showSystemMsg('Camera/mic permission denied — tap the lock icon in your browser address bar and allow access, then reload.');
+      showSystemMsg('ไม่ได้รับอนุญาตให้ใช้กล้อง/ไมค์ — แตะไอคอนรูปแม่กุญแจในแถบที่อยู่เบราว์เซอร์เพื่ออนุญาต แล้วโหลดหน้าใหม่');
     } else if (e.name === 'NotFoundError') {
-      showSystemMsg('No camera/mic found — chat still works.');
+      showSystemMsg('ไม่พบกล้อง/ไมค์ — ยังใช้แชทได้ตามปกติ');
     } else {
-      showSystemMsg('Camera/mic not available — chat still works.');
+      showSystemMsg('ใช้กล้อง/ไมค์ไม่ได้ — ยังใช้แชทได้ตามปกติ');
     }
   }
 }
@@ -414,6 +438,8 @@ function toggleMic() {
   state.localStream.getAudioTracks().forEach(t => (t.enabled = state.micOn));
   micBtn.classList.toggle('off', !state.micOn);
   micBtn.title = state.micOn ? 'Mute microphone' : 'Unmute microphone';
+  micBtn.setAttribute('aria-pressed', String(!state.micOn));
+  announceAccessibility(state.micOn ? 'เปิดไมโครโฟนแล้ว' : 'ปิดไมโครโฟนแล้ว');
 }
 
 function toggleCam() {
@@ -424,11 +450,51 @@ function toggleCam() {
   camPlaceholder.classList.toggle('visible', !state.camOn);
   videoBtn.classList.toggle('off', !state.camOn);
   videoBtn.title = state.camOn ? 'Disable camera' : 'Enable camera';
+  videoBtn.setAttribute('aria-pressed', String(!state.camOn));
 }
 
 // ════════════════════════════════════════════════
 //  MODE
 // ════════════════════════════════════════════════
+// "Talk with AI" tab stays in the DOM (not deleted) but is hidden from the
+// nav unless re-enabled via Settings, so the operator UI defaults to the
+// robot/customer workflow this project is actually for.
+function applyAiModeVisibility() {
+  const aiBtn = document.querySelector('.mode-btn[data-mode="ai"]');
+  if (aiBtn) aiBtn.style.display = settings.showAiMode ? '' : 'none';
+}
+
+// ── Remote video rotation ────────────────────────
+// Rotates the incoming remote video display (Settings → หมุนภาพวิดีโอที่ได้รับ),
+// for when the camera on the other side is mounted sideways or upside down.
+// 90/270: the element's box is swapped (width ↔ container height) so the
+// rotated video still fills the wrap; re-applied on resize and mode change.
+function applyRemoteRotation() {
+  const deg = parseInt(settings.remoteRotation, 10) || 0;
+  const sideways = deg === 90 || deg === 270;
+  if (!sideways) {
+    remoteVideo.style.width  = '';
+    remoteVideo.style.height = '';
+    remoteVideo.style.transform = deg ? `rotate(${deg}deg)` : '';
+    return;
+  }
+  const wrap = $('remote-wrap');
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  if (!w || !h) return; // wrap hidden (not in person mode) — applyMode re-applies later
+  remoteVideo.style.width  = h + 'px';
+  remoteVideo.style.height = w + 'px';
+  remoteVideo.style.transform = `rotate(${deg}deg)`;
+}
+
+// YOLO "ตรวจจับ" is a debug/demo feature, not part of the customer-service
+// workflow — hidden from the main controls bar by default (re-enable in Settings).
+function applyDetectButtonVisibility() {
+  if (!detectBtn) return;
+  const show = !!settings.showDetectButton;
+  if (state.mode !== 'ai') detectBtn.style.display = show ? '' : 'none';
+  if (!show && detectOn) stopDetect();
+}
+
 function applyMode(mode) {
   state.mode = mode;
   document.querySelectorAll('.mode-btn').forEach(b =>
@@ -442,12 +508,14 @@ function applyMode(mode) {
   const controlsRow = document.querySelector('.robot-controls-row');
 
   if (mode === 'robot') {
+    // Internal-only mode used by the /face kiosk display (no nav button).
+    // body.face-mode CSS forces this panel full-screen and hides everything else.
     robotPanel.style.display = 'flex';
-    if (controlsRow) controlsRow.style.display = '';
+    if (controlsRow) controlsRow.style.display = 'none';
     remoteWrap.style.display = 'none';
     localWrap.style.display  = 'none';
     roomBar.style.display    = currentRoomId ? 'block' : 'none';
-    detectBtn.style.display  = '';
+    applyDetectButtonVisibility();
     stopDetect();
     if (recognition) recognition.lang = 'th-TH';
     initRobotPanel();
@@ -462,19 +530,21 @@ function applyMode(mode) {
     initRobotPanel();
     startDetect();
   } else {
+    // Person mode: video call + manual robot controls (joystick/D-pad) in one tab
     robotPanel.style.display = 'none';
     if (controlsRow) controlsRow.style.display = '';
     remoteWrap.style.display = '';
     localWrap.style.display  = '';
-    detectBtn.style.display  = '';
+    applyDetectButtonVisibility();
     stopDetect();
+    initRobotPanel();
   }
 
   if (mode === 'ai') {
     roomBar.style.display = 'none';
     aiAvatar.style.display = 'none';
     remoteVideo.classList.remove('active');
-    remoteName.textContent = 'AI Assistant';
+    remoteName.textContent = 'ผู้ช่วย AI';
     if (recognition) recognition.lang = 'th-TH';
   } else if (mode === 'person') {
     roomBar.style.display = 'block';
@@ -485,16 +555,14 @@ function applyMode(mode) {
     // Auto-enable peer TTS so the other side hears our typed messages by default
     if (!myTTSEnabled) {
       myTTSEnabled = true;
-      const ttsBtn = $('peer-tts-btn');
-      if (ttsBtn) {
-        ttsBtn.classList.add('active-speech');
-        ttsBtn.title = 'ปิดเสียงข้อความของฉัน (Voice my messages: ON)';
-      }
+      updatePeerTTSStatus();
       if (currentRoomId && socket) socket.emit('peer-tts', { roomId: currentRoomId, enabled: true });
       showSystemMsg('เปิดเสียงข้อความให้คู่สนทนาอัตโนมัติแล้ว — กดปุ่ม 🔊 ในหัวแชทเพื่อปิด');
     }
     announceAccessibility('โหมดคุยกับคน พร้อมแล้ว — กดปุ่ม Speech เพื่อเริ่มพูด');
   }
+
+  applyRemoteRotation(); // wrap size depends on which panels are visible
 
   if (state.speechOn && recognition) {
     try { recognition.stop(); } catch {}
@@ -515,6 +583,7 @@ const robotState = {
 let mqttClient          = null;
 let robotPanelReady     = false;
 let dpadInterval        = null;
+const dpadKeyHandlers   = {}; // dir -> { press, release } — shared by buttons and Arrow-key handler
 
 // ── Three.js joint driver ────────────────────────
 function updateRobotModel() {
@@ -534,16 +603,26 @@ function updateRobotModel() {
 // Keep old name as alias so any remaining callers don't break
 var updateFaceAnimation = updateRobotModel;
 
+// ── Canonical robot wire format ──────────────────
+// One encoding shared by every path (live control, AI emotions, MQTT, data
+// channel) and BOTH sides of the call — decode must never depend on the
+// receiver's UI mode, because the sender may be in a different mode (operator
+// in Person mode → /face kiosk in robot mode). Matches the physical servos:
+// head 0-80 (center 40), jaw 30-100 (30 = closed).
+const WIRE_HEAD_BASE = 40, WIRE_HEAD_MIN = 0,  WIRE_HEAD_MAX = 80;
+const WIRE_MOUTH_MIN = 30, WIRE_MOUTH_MAX = 100;
+const clampNum = (v, min, max) => Math.min(max, Math.max(min, v));
+
 // Shared parser used by both MQTT and WebRTC data channel
 function applyRobotPayload(str) {
   try {
     const data = JSON.parse(str);
     if (data.Head === undefined && data.Mouth === undefined && data.Analog === undefined) return false;
-    if (data.Head   !== undefined) robotState.headAngle = data.Head - 65;
-    if (data.Mouth  !== undefined) robotState.mouthOpen = (data.Mouth - 20) / 130;
+    if (data.Head  !== undefined) robotState.headAngle = clampNum(data.Head, WIRE_HEAD_MIN, WIRE_HEAD_MAX) - WIRE_HEAD_BASE;
+    if (data.Mouth !== undefined) robotState.mouthOpen = clampNum((data.Mouth - WIRE_MOUTH_MIN) / (WIRE_MOUTH_MAX - WIRE_MOUTH_MIN), 0, 1);
     if (data.Analog !== undefined) {
-      robotState.analogX = data.Analog.x ?? robotState.analogX;
-      robotState.analogY = data.Analog.y ?? robotState.analogY;
+      robotState.analogX = clampNum(data.Analog.x ?? robotState.analogX, -1, 1);
+      robotState.analogY = clampNum(data.Analog.y ?? robotState.analogY, -1, 1);
     }
     updateRobotModel();
     return true;
@@ -575,15 +654,15 @@ function connectMQTT() {
   const dot   = $('mqtt-dot');
   const txt   = $('mqtt-status-text');
 
-  if (!url) { txt.textContent = 'Set broker URL in Settings'; dot.className = 'mqtt-dot'; return; }
-  if (!window.mqtt) { txt.textContent = 'mqtt.js not loaded'; return; }
+  if (!url) { txt.textContent = 'ยังไม่ได้ตั้งค่า Broker URL ในการตั้งค่า'; dot.className = 'mqtt-dot'; return; }
+  if (!window.mqtt) { txt.textContent = 'mqtt.js ยังไม่ถูกโหลด'; return; }
 
   if (mqttClient) {
     try { mqttClient.end(true); } catch {}
     mqttClient = null;
   }
 
-  txt.textContent = 'Connecting…';
+  txt.textContent = 'กำลังเชื่อมต่อ…';
   dot.className = 'mqtt-dot';
 
   try {
@@ -600,16 +679,25 @@ function connectMQTT() {
       mqttClient.subscribe('robot/emotion'); // AI emotion sequences
     });
     mqttClient.on('message', (t, payload) => {
-      if (t === 'robot/emotion') playEmotionSequence(payload.toString());
-      else applyRobotPayload(payload.toString());
+      const str = payload.toString();
+      // Live single frames also arrive via the data channel (fresher, full
+      // rate). When a DC is open, skip the throttled/stale MQTT copy so the
+      // 3D face doesn't jitter between old and new positions — and the
+      // operator side ignores its own broker loopback. AI emotion
+      // sequences (JSON arrays) still play from MQTT as before.
+      const isSequence = str.trim().startsWith('[');
+      const hasOpenDC = Object.values(peers).some(p => p.dc && p.dc.readyState === 'open');
+      if (!isSequence && hasOpenDC) return;
+      if (isSequence) playEmotionSequence(str);
+      else applyRobotPayload(str);
     });
     mqttClient.on('error', (e) => {
-      txt.textContent = e.message || 'Error';
+      txt.textContent = e.message || 'ข้อผิดพลาด';
       dot.className = 'mqtt-dot error';
     });
     mqttClient.on('close', () => {
-      if (txt.textContent !== 'Connecting…') {
-        txt.textContent = 'Disconnected';
+      if (txt.textContent !== 'กำลังเชื่อมต่อ…') {
+        txt.textContent = 'ตัดการเชื่อมต่อแล้ว';
         dot.className = 'mqtt-dot';
       }
     });
@@ -619,9 +707,48 @@ function connectMQTT() {
   }
 }
 
+// Live control fires at pointer-move rate (60+ Hz on drag). The data channel
+// and local 3D preview handle that fine, but the MQTT → deep.py → Arduino
+// path cannot: flooding the broker builds a backlog of stale frames and the
+// physical robot lags behind, replaying old positions (= jerky motion).
+// Throttle MQTT publishes to ~15 Hz with a trailing edge so the newest state
+// (including the final release/reset frame) always gets through.
+const MQTT_PUBLISH_GAP_MS = 66;
+let mqttLastPubAt  = 0;
+let mqttPubTimer   = null;
+let mqttPendingMsg = null;
+
+// Live control frames go to the topic configured in Settings (default
+// robot/control); AI emotion sequences keep the fixed robot/emotion topic.
+// deep.py subscribes to both.
+function liveControlTopic() { return settings.mqttTopic || 'robot/control'; }
+
+function publishRobotStateMQTT(msg) {
+  if (!mqttClient || !mqttClient.connected) return;
+  const now = Date.now();
+  if (!mqttPubTimer && now - mqttLastPubAt >= MQTT_PUBLISH_GAP_MS) {
+    mqttLastPubAt = now;
+    mqttClient.publish(liveControlTopic(), msg);
+    return;
+  }
+  mqttPendingMsg = msg;
+  if (!mqttPubTimer) {
+    mqttPubTimer = setTimeout(() => {
+      mqttPubTimer = null;
+      if (mqttClient && mqttClient.connected && mqttPendingMsg) {
+        mqttLastPubAt = Date.now();
+        mqttClient.publish(liveControlTopic(), mqttPendingMsg);
+        mqttPendingMsg = null;
+      }
+    }, Math.max(0, MQTT_PUBLISH_GAP_MS - (now - mqttLastPubAt)));
+  }
+}
+
 function publishRobotState() {
-  const headDeg  = Math.round(65 + robotState.headAngle);
-  const mouthDeg = Math.round(20 + robotState.mouthOpen * 130);
+  // Canonical wire encoding (head 0-80 center 40, mouth 30-100) — same base
+  // in every mode so the receiving side can always decode with WIRE_* consts.
+  const headDeg  = clampNum(Math.round(WIRE_HEAD_BASE + robotState.headAngle), WIRE_HEAD_MIN, WIRE_HEAD_MAX);
+  const mouthDeg = clampNum(Math.round(WIRE_MOUTH_MIN + robotState.mouthOpen * (WIRE_MOUTH_MAX - WIRE_MOUTH_MIN)), WIRE_MOUTH_MIN, WIRE_MOUTH_MAX);
   const msg = JSON.stringify({
     Head:   headDeg,
     Mouth:  mouthDeg,
@@ -632,16 +759,31 @@ function publishRobotState() {
   });
   // Primary: WebRTC data channel (direct peer-to-peer, no broker latency)
   sendToPeer(msg);
-  // Publish to robot/emotion so deep.py and /face both receive it
-  if (mqttClient && mqttClient.connected) {
-    mqttClient.publish('robot/emotion', msg);
-  }
+  // Publish to the live-control topic so deep.py and /face both receive it (throttled)
+  publishRobotStateMQTT(msg);
 }
 
 // ── Joystick ─────────────────────────────────────
-function initJoystick() {
+// Shared by pointer drag and keyboard (WASD) — x/y each in -1..1
+function setJoystick(x, y) {
+  robotState.analogX = x;
+  robotState.analogY = y;
   const base  = $('joystick-base');
   const thumb = $('joystick-thumb');
+  if (base && thumb) {
+    const maxR = base.getBoundingClientRect().width * 0.35;
+    thumb.style.transform = `translate(${x * maxR}px,${-y * maxR}px)`;
+    thumb.classList.toggle('active', x !== 0 || y !== 0);
+  }
+  publishRobotState();
+}
+
+function resetJoystick() {
+  setJoystick(0, 0);
+}
+
+function initJoystick() {
+  const base = $('joystick-base');
   let active = false;
 
   function getCenter() {
@@ -655,21 +797,13 @@ function initJoystick() {
     let dy   = clientY - c.y;
     const d  = Math.sqrt(dx * dx + dy * dy);
     if (d > c.maxR) { dx = dx / d * c.maxR; dy = dy / d * c.maxR; }
-    thumb.style.transform     = `translate(${dx}px,${dy}px)`;
-    thumb.classList.add('active');
-    robotState.analogX = +(dx / c.maxR).toFixed(3);
-    robotState.analogY = +(-dy / c.maxR).toFixed(3);
-    publishRobotState();
+    setJoystick(+(dx / c.maxR).toFixed(3), +(-dy / c.maxR).toFixed(3));
   }
 
   function release() {
     if (!active) return;
     active = false;
-    thumb.style.transform = 'translate(0,0)';
-    thumb.classList.remove('active');
-    robotState.analogX = 0;
-    robotState.analogY = 0;
-    publishRobotState();
+    resetJoystick();
   }
 
   base.addEventListener('mousedown',  (e) => { active = true; move(e.clientX, e.clientY); });
@@ -681,49 +815,67 @@ function initJoystick() {
 }
 
 // ── D-pad ─────────────────────────────────────────
+// Directions currently held (button and/or Arrow key) — supports several at once,
+// e.g. Left+Up held together turns the head and opens the mouth in the same tick.
+const activeDpadDirs = new Set();
+
 function applyDPad() {
-  switch (robotState.padDir) {
-    case 'left':  robotState.headAngle = Math.min(robotState.headAngle + 3,  35); break;
-    case 'right': robotState.headAngle = Math.max(robotState.headAngle - 3, -35); break;
-    case 'up':    robotState.mouthOpen = Math.max(robotState.mouthOpen - 0.10,  0); break;
-    case 'down':  robotState.mouthOpen = Math.min(robotState.mouthOpen + 0.10,  1); break;
-  }
+  const speed = parseFloat(settings.dpadSpeed) || 1;
+  // Person mode drives the real robot: head servo range 0-80 (center 40) →
+  // headAngle ±40. Other modes keep the original ±35 cap.
+  const headLimit = state.mode === 'person' ? 40 : 35;
+  if (activeDpadDirs.has('left'))  robotState.headAngle += 3 * speed;
+  if (activeDpadDirs.has('right')) robotState.headAngle -= 3 * speed;
+  robotState.headAngle = Math.max(-headLimit, Math.min(headLimit, robotState.headAngle));
+  if (activeDpadDirs.has('up'))    robotState.mouthOpen = Math.max(robotState.mouthOpen - 0.10 * speed,  0);
+  if (activeDpadDirs.has('down'))  robotState.mouthOpen = Math.min(robotState.mouthOpen + 0.10 * speed,  1);
+}
+
+// Center button / Space key — reset head, mouth and eyes to neutral
+function resetDPad() {
+  activeDpadDirs.clear();
+  if (dpadInterval) { clearInterval(dpadInterval); dpadInterval = null; }
+  document.querySelectorAll('.dpad-btn.pressed').forEach((b) => b.classList.remove('pressed'));
+  robotState.headAngle = 0;
+  robotState.mouthOpen = 0;
+  robotState.analogX   = 0;
+  robotState.analogY   = 0;
+  publishRobotState();
 }
 
 function initDPad() {
   const centerBtn = $('dpad-center');
   if (centerBtn) {
-    function resetAll() {
-      robotState.headAngle = 0;
-      robotState.mouthOpen = 0;
-      robotState.analogX   = 0;
-      robotState.analogY   = 0;
-      publishRobotState();
-    }
-    centerBtn.addEventListener('mousedown',  resetAll);
-    centerBtn.addEventListener('touchstart', (e) => { e.preventDefault(); resetAll(); }, { passive: false });
+    centerBtn.addEventListener('mousedown',  resetDPad);
+    centerBtn.addEventListener('touchstart', (e) => { e.preventDefault(); resetDPad(); }, { passive: false });
   }
 
   ['up', 'down', 'left', 'right'].forEach((dir) => {
     const btn = $(`dpad-${dir}`);
 
     function press() {
-      robotState.padDir = dir;
+      if (activeDpadDirs.has(dir)) return; // already held — ignore repeat presses
+      activeDpadDirs.add(dir);
       btn.classList.add('pressed');
       applyDPad();
       publishRobotState();
-      if (dpadInterval) clearInterval(dpadInterval);
-      dpadInterval = setInterval(() => { applyDPad(); publishRobotState(); }, 50);
+      if (!dpadInterval) {
+        dpadInterval = setInterval(() => { applyDPad(); publishRobotState(); }, 50);
+      }
     }
 
     function release() {
-      if (robotState.padDir !== dir) return;
-      clearInterval(dpadInterval);
-      dpadInterval = null;
-      robotState.padDir = null;
+      if (!activeDpadDirs.has(dir)) return;
+      activeDpadDirs.delete(dir);
       btn.classList.remove('pressed');
+      if (activeDpadDirs.size === 0 && dpadInterval) {
+        clearInterval(dpadInterval);
+        dpadInterval = null;
+      }
       publishRobotState();
     }
+
+    dpadKeyHandlers[dir] = { press, release }; // reused by Arrow-key keyboard handler
 
     btn.addEventListener('mousedown',   press);
     btn.addEventListener('touchstart',  (e) => { e.preventDefault(); press(); }, { passive: false });
@@ -757,6 +909,97 @@ function initRobotPanel() {
 }
 
 // ════════════════════════════════════════════════
+//  KEYBOARD CONTROLS
+//  Arrow keys → D-pad (head/mouth), WASD → joystick (eyes) — Person mode only.
+//  Left Alt → toggle Speech (STT). Right Alt → toggle TTS output
+//  (AI voice in AI mode, voicing-my-messages-to-peer in Person mode).
+//  All shortcuts are disabled while typing in a text field or with a modal open.
+// ════════════════════════════════════════════════
+const ARROW_DIR    = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+const EYE_KEY_DIR  = { KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right' };
+const pressedEyeKeys = new Set();
+
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+
+function isModalOpen() {
+  return !!(settingsOverlay?.classList.contains('open') || $('help-overlay')?.classList.contains('open'));
+}
+
+function updateEyesFromKeys() {
+  const x = (pressedEyeKeys.has('right') ? 1 : 0) - (pressedEyeKeys.has('left') ? 1 : 0);
+  const y = (pressedEyeKeys.has('up')    ? 1 : 0) - (pressedEyeKeys.has('down') ? 1 : 0);
+  setJoystick(x, y);
+}
+
+// Quick AI-voice-response toggle (mirrors the Settings → "AI Voice Response" checkbox)
+function toggleAITTS() {
+  settings.ttsEnabled = !settings.ttsEnabled;
+  persistSettings(settings);
+  const cb = $('s-tts');
+  if (cb) cb.checked = settings.ttsEnabled;
+  if (!settings.ttsEnabled) stopSpeaking();
+  showSystemMsg(settings.ttsEnabled ? 'เปิดเสียงตอบกลับ AI แล้ว' : 'ปิดเสียงตอบกลับ AI แล้ว');
+}
+
+function initKeyboardControls() {
+  window.addEventListener('keydown', (e) => {
+    if (isTypingTarget(document.activeElement) || isModalOpen()) return;
+
+    if (e.code === 'AltLeft' || e.code === 'AltRight') {
+      e.preventDefault();
+      if (e.repeat) return;
+      if (e.code === 'AltLeft') toggleSpeech();
+      else if (state.mode === 'person') togglePeerTTS();
+      else toggleAITTS();
+      return;
+    }
+
+    if (state.mode !== 'person') return;
+
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (!e.repeat) resetDPad();
+      return;
+    }
+
+    const dir = ARROW_DIR[e.key];
+    if (dir) {
+      e.preventDefault();
+      if (!e.repeat) dpadKeyHandlers[dir]?.press();
+      return;
+    }
+
+    const eyeDir = EYE_KEY_DIR[e.code];
+    if (eyeDir && !pressedEyeKeys.has(eyeDir)) {
+      e.preventDefault();
+      pressedEyeKeys.add(eyeDir);
+      updateEyesFromKeys();
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    const dir = ARROW_DIR[e.key];
+    if (dir) { dpadKeyHandlers[dir]?.release(); return; }
+
+    const eyeDir = EYE_KEY_DIR[e.code];
+    if (eyeDir && pressedEyeKeys.has(eyeDir)) {
+      pressedEyeKeys.delete(eyeDir);
+      updateEyesFromKeys();
+    }
+  });
+
+  // Release any keyboard-held controls if the window loses focus mid-press
+  window.addEventListener('blur', () => {
+    Object.keys(dpadKeyHandlers).forEach(dir => dpadKeyHandlers[dir]?.release());
+    if (pressedEyeKeys.size) { pressedEyeKeys.clear(); updateEyesFromKeys(); }
+  });
+}
+
+// ════════════════════════════════════════════════
 //  SPEECH RECOGNITION
 // ════════════════════════════════════════════════
 function initSpeechRecognition() {
@@ -766,7 +1009,7 @@ function initSpeechRecognition() {
     if (IS_IOS) {
       // Delay so it appears after the welcome message
       setTimeout(() => showSystemMsg(
-        'Speech recognition is not available on iOS Safari. Please type your messages.'
+        'iOS Safari ไม่รองรับการรู้จำเสียงพูด กรุณาพิมพ์ข้อความแทน'
       ), 1200);
     }
     return;
@@ -809,13 +1052,16 @@ function initSpeechRecognition() {
 
       console.log('[STT] final chunk:', trimmed);
 
-      if (state.mode === 'person' || state.mode === 'ai') {
+      if (state.mode === 'ai') {
         const speechWrap = appendMessage(currentUserName, trimmed, 'you');
-
         console.log('[STT] sending to AI:', trimmed);
-
-        if (state.mode === 'person') sendToPeer(trimmed);
-        else sendToAI(trimmed);
+        sendToAI(trimmed);
+      } else if (state.mode === 'person' || state.mode === 'robot') {
+        // 'robot' = /face kiosk: chat column is hidden (body.face-mode CSS)
+        // but the message still needs to reach the peer's chat over the data channel.
+        const speechWrap = appendMessage(currentUserName, trimmed, 'you');
+        console.log('[STT] sending to peer:', trimmed);
+        sendToPeer(trimmed);
       } else {
         const sep = chatInput.value.trim() ? ' ' : '';
         chatInput.value = chatInput.value.trim() + sep + trimmed;
@@ -827,10 +1073,10 @@ function initSpeechRecognition() {
   recognition.onerror = (e) => {
     console.warn('[STT] error:', e.error);
     if (['not-allowed', 'service-not-allowed'].includes(e.error)) {
-      showSystemMsg('Microphone access denied. Allow microphone in browser settings.');
+      showSystemMsg('ไม่ได้รับอนุญาตให้ใช้ไมโครโฟน กรุณาอนุญาตในการตั้งค่าเบราว์เซอร์');
       disableSpeech();
     } else if (e.error === 'audio-capture') {
-      showSystemMsg('Cannot access microphone — it may be in use by another app.');
+      showSystemMsg('ใช้ไมโครโฟนไม่ได้ — อาจถูกใช้งานโดยแอปอื่นอยู่');
       disableSpeech();
     } else if (e.error === 'network') {
       // Back off faster on network errors to avoid hammering the service
@@ -851,18 +1097,56 @@ function initSpeechRecognition() {
   };
 }
 
+// On Android Chrome, SpeechRecognition requests the microphone through a
+// separate OS-level session from getUserMedia. Just muting the WebRTC audio
+// track (`enabled = false`) does NOT release the hardware lock, so the
+// recognizer still can't get audio — the track must actually be stopped.
+// Every peer connection reserves its audio sender up front (see
+// createPeerConnection), so replaceTrack() here never needs SDP renegotiation
+// — safe even if a peer connects while the mic is already paused (e.g. /face
+// auto-starts STT before any peer has joined).
+function pauseLocalAudioForSTT() {
+  if (!state.localStream) return;
+  const audioTracks = state.localStream.getAudioTracks();
+  if (!audioTracks.length) return;
+  Object.values(peers).forEach((p) => {
+    if (p.audioSender) p.audioSender.replaceTrack(null).catch(() => {});
+  });
+  audioTracks.forEach(t => { t.stop(); state.localStream.removeTrack(t); });
+  console.log('[STT] mic released for speech recognition (mobile)');
+}
+
+async function resumeLocalAudioAfterSTT() {
+  if (!state.micOn || !state.localStream) return; // respects mute button state
+  try {
+    const freshStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const newTrack = freshStream.getAudioTracks()[0];
+    if (!newTrack) return;
+    state.localStream.addTrack(newTrack);
+    Object.values(peers).forEach((p) => {
+      if (p.audioSender) p.audioSender.replaceTrack(newTrack).catch(() => {});
+    });
+    console.log('[STT] mic reacquired after speech recognition (mobile)');
+  } catch (err) {
+    console.warn('[STT] could not reacquire microphone after speech recognition:', err);
+  }
+}
+
 function enableSpeech() {
   if (!recognition) return;
   recognition.lang = 'th-TH';
   state.speechOn = true;
   // On mobile the Web Speech API and getUserMedia sometimes compete for the
-  // microphone. Pause the local audio track while STT is active so speech
+  // microphone. Release the local audio track while STT is active so speech
   // recognition gets exclusive mic access.
-  if (IS_MOBILE && state.localStream) {
-    state.localStream.getAudioTracks().forEach(t => (t.enabled = false));
-  }
+  // EXCEPT on the /face kiosk: the operator must always HEAR the customer —
+  // live audio outranks STT text. Keep the mic streaming over WebRTC even if
+  // that means SpeechRecognition can't grab the mic on Android (use Whisper
+  // STT mode in Settings if the kiosk is Android and text is also needed).
+  if (IS_MOBILE && !IS_FACE) pauseLocalAudioForSTT();
   try { recognition.start(); } catch {}
   speechBtn.classList.add('active-speech');
+  speechBtn.setAttribute('aria-pressed', 'true');
   speechIndicator.style.display = 'flex';
   const hint = state.mode === 'robot'
     ? 'Speech ON (ภาษาไทย) — พูดได้เลย'
@@ -875,11 +1159,11 @@ function disableSpeech() {
   if (recognition) try { recognition.stop(); } catch {}
   if (interimMsgEl) { interimMsgEl.remove(); interimMsgEl = null; }
   speechBtn.classList.remove('active-speech');
+  speechBtn.setAttribute('aria-pressed', 'false');
   speechIndicator.style.display = 'none';
-  // Restore mic track when STT is off (respects the mute button state)
-  if (IS_MOBILE && state.localStream && state.micOn) {
-    state.localStream.getAudioTracks().forEach(t => (t.enabled = true));
-  }
+  // Restore mic track when STT is off (respects the mute button state);
+  // /face never paused it (see enableSpeech) so nothing to restore there
+  if (IS_MOBILE && !IS_FACE) resumeLocalAudioAfterSTT();
 }
 
 // ── Whisper STT with silence detection ───────────────────────
@@ -923,7 +1207,7 @@ async function startWhisperRecording() {
       console.log('[Whisper] blob size:', blob.size, 'type:', blob.type);
       if (blob.size < 1000) {
         console.warn('[Whisper] blob too small — microphone may not have captured audio');
-        showSystemMsg('No audio captured — check microphone permissions.');
+        showSystemMsg('ไม่มีเสียงถูกบันทึก — กรุณาตรวจสอบสิทธิ์การใช้ไมโครโฟน');
         return;
       }
       await transcribeWhisper(blob);
@@ -960,11 +1244,12 @@ async function startWhisperRecording() {
     requestAnimationFrame(checkSilence);
 
     speechBtn.classList.add('active-speech');
+    speechBtn.setAttribute('aria-pressed', 'true');
     speechIndicator.style.display = 'flex';
     console.log('[Whisper] recording started — will auto-stop on silence');
   } catch (err) {
     console.error('[Whisper] mic error:', err.name, err.message);
-    showSystemMsg(`Microphone error: ${err.message}`);
+    showSystemMsg(`ไมโครโฟนมีปัญหา: ${err.message}`);
   }
 }
 
@@ -977,6 +1262,7 @@ function stopWhisperRecording() {
   // In continuous mode keep the button/indicator active (we'll restart after transcription)
   if (!whisperContinuous) {
     speechBtn.classList.remove('active-speech');
+    speechBtn.setAttribute('aria-pressed', 'false');
     speechIndicator.style.display = 'none';
   }
 }
@@ -1009,17 +1295,18 @@ async function transcribeWhisper(blob) {
     const sttMs = Date.now() - sttStart;
     console.log('[Whisper] server response', r.status, ':', responseText);
     indicator.remove();
-    if (!r.ok) { console.error('[Whisper] server error', r.status, responseText); showSystemMsg(`Whisper error: ${r.status}`); return; }
+    if (!r.ok) { console.error('[Whisper] server error', r.status, responseText); showSystemMsg(`ถอดความเสียงผิดพลาด: ${r.status}`); return; }
     const { text, error } = JSON.parse(responseText);
-    if (error) { console.error('[Whisper] API error:', error); showSystemMsg(`Whisper API error: ${error}`); return; }
+    if (error) { console.error('[Whisper] API error:', error); showSystemMsg(`ถอดความเสียงผิดพลาด: ${error}`); return; }
     const trimmed = (text || '').trim();
     if (!trimmed) { console.log('[Whisper] empty transcript'); return; }
     console.log('[Whisper] transcript:', trimmed);
 
     appendMessage(currentUserName, trimmed, 'you');
     showTimingLog([['STT', sttMs]]);
-    if (state.mode === 'person') sendToPeer(trimmed);
-    else sendToAI(trimmed);
+    // 'robot' = /face kiosk: chat column is hidden but still needs to send to the peer.
+    if (state.mode === 'ai') sendToAI(trimmed);
+    else sendToPeer(trimmed);
   } catch (err) {
     indicator.remove();
     console.error('[Whisper] error:', err);
@@ -1036,14 +1323,16 @@ function toggleSpeech() {
       whisperContinuous = false;
       stopWhisperRecording();
       speechBtn.classList.remove('active-speech');
+      speechBtn.setAttribute('aria-pressed', 'false');
       speechIndicator.style.display = 'none';
-      showSystemMsg('Speech OFF.');
+      showSystemMsg('ปิดการรับฟังเสียงแล้ว');
     } else {
       // Turn continuous mode ON
       whisperContinuous = true;
       speechBtn.classList.add('active-speech');
+      speechBtn.setAttribute('aria-pressed', 'true');
       speechIndicator.style.display = 'flex';
-      showSystemMsg('Speech ON — listening continuously, will stop on silence…');
+      showSystemMsg('เปิดการรับฟังเสียงแล้ว — จะหยุดบันทึกอัตโนมัติเมื่อเงียบ…');
       startWhisperRecording();
     }
   } else {
@@ -1059,7 +1348,7 @@ function speak(text) {
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(stripJsonBlocks(text));
   utt.rate = settings.ttsRate || 1;
-  const thaiVoice = getThaiVoice(settings.voiceGender);
+  const thaiVoice = getThaiVoice();
   if (thaiVoice) { utt.voice = thaiVoice; utt.lang = 'th-TH'; }
   utt.onstart = () => { aiAvatar.classList.add('speaking'); aiSpeaking.style.display = 'block'; };
   utt.onend = utt.onerror = () => { aiAvatar.classList.remove('speaking'); aiSpeaking.style.display = 'none'; };
@@ -1083,14 +1372,13 @@ function stopSpeaking() {
 let myTTSEnabled   = false;
 let peerTTSEnabled = false;
 
-// Pick a Thai voice matching the requested gender (best-effort; falls back to any Thai voice)
-function getThaiVoice(gender = 'male') {
+// Prefer a male-sounding Thai voice (matches the robot's male persona in the
+// default system prompt); falls back to whatever Thai voice is available.
+function getThaiVoice() {
   const voices = (window.speechSynthesis?.getVoices() || []).filter(v => v.lang.startsWith('th'));
   if (!voices.length) return null;
-  const maleKw   = /male|man|niwat|narong|boy/i;
-  const femaleKw = /female|woman|pattara|kanya|girl/i;
-  const kw = gender === 'female' ? femaleKw : maleKw;
-  return voices.find(v => kw.test(v.name + v.voiceURI)) || voices[0];
+  const maleKw = /male|man|niwat|narong|boy/i;
+  return voices.find(v => maleKw.test(v.name + v.voiceURI)) || voices[0];
 }
 
 // Called when an incoming peer message arrives — speak it if the peer has
@@ -1099,7 +1387,7 @@ function speakPeerMessage(text) {
   if (!peerTTSEnabled || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(stripJsonBlocks(text));
-  const thai = getThaiVoice(settings.voiceGender);
+  const thai = getThaiVoice();
   if (thai) utt.voice = thai;
   utt.rate = 1.0;
   window.speechSynthesis.speak(utt);
@@ -1111,23 +1399,32 @@ function speakOnDemand(text) {
   unlockTTS();
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(stripJsonBlocks(text));
-  const thai = getThaiVoice(settings.voiceGender);
+  const thai = getThaiVoice();
   if (thai) utt.voice = thai;
   utt.rate = 1.0;
   window.speechSynthesis.speak(utt);
 }
 
+function updatePeerTTSStatus() {
+  const btn = $('peer-tts-btn');
+  const statusEl = $('peer-tts-status');
+  if (btn) {
+    btn.classList.toggle('active-speech', myTTSEnabled);
+    btn.setAttribute('aria-pressed', String(myTTSEnabled));
+    btn.title = myTTSEnabled
+      ? 'Voicing my messages ON — peer will hear what I type'
+      : 'Voice my messages to peer';
+  }
+  if (statusEl) statusEl.textContent = myTTSEnabled ? 'เสียงถึงลูกค้า: เปิด' : 'เสียงถึงลูกค้า: ปิด';
+}
+
 function togglePeerTTS() {
   unlockTTS(); // button click = user gesture, satisfies iOS audio unlock
   myTTSEnabled = !myTTSEnabled;
-  const btn = $('peer-tts-btn');
-  btn.classList.toggle('active-speech', myTTSEnabled);
-  btn.title = myTTSEnabled
-    ? 'Voicing my messages ON — peer will hear what I type'
-    : 'Voice my messages to peer';
+  updatePeerTTSStatus();
   showSystemMsg(myTTSEnabled
-    ? 'Your messages will be read aloud to your peer.'
-    : 'Stopped voicing your messages to peer.');
+    ? 'ข้อความของคุณจะถูกอ่านออกเสียงให้คู่สนทนาฟัง'
+    : 'หยุดอ่านออกเสียงข้อความของคุณให้คู่สนทนาแล้ว');
   // Tell the peer to start/stop reading our messages
   if (currentRoomId && socket) {
     socket.emit('peer-tts', { roomId: currentRoomId, enabled: myTTSEnabled });
@@ -1218,12 +1515,13 @@ function showSystemMsg(text) {
 }
 
 function showTimingLog(parts) {
+  console.log('[Timing]', Object.fromEntries(parts.map(([l, ms]) => [l, `${(ms/1000).toFixed(2)}s`])));
+  if (!settings.showTimingLog) return; // debug-only breakdown, hidden from the chat by default
   const el = document.createElement('div');
   el.className = 'system-msg timing-log';
   el.textContent = '⏱ ' + parts.map(([label, ms]) => `${label} ${(ms / 1000).toFixed(2)}s`).join(' · ');
   chatMessages.appendChild(el);
   chatMessages.scrollTop = chatMessages.scrollHeight;
-  console.log('[Timing]', Object.fromEntries(parts.map(([l, ms]) => [l, `${(ms/1000).toFixed(2)}s`])));
 }
 
 // Mobile browsers (especially iOS) block TTS until a user gesture occurs.
@@ -1256,10 +1554,10 @@ async function sendMessage() {
 
   const youWrap = appendMessage(currentUserName, text, 'you');
 
-  if (state.mode === 'person') {
-    sendToPeer(text);
-  } else {
+  if (state.mode === 'ai') {
     await sendToAI(text);
+  } else {
+    sendToPeer(text); // 'person' or 'robot' (/face)
   }
 }
 
@@ -1298,8 +1596,8 @@ function publishEmotion(text) {
       const d = JSON.parse(block);
       if (d.Head === undefined && d.Mouth === undefined && d.Analog === undefined) continue;
       emotions.push({
-        Head:   Math.min(150, Math.max(20,  Math.round(d.Head  ?? 65))),
-        Mouth:  Math.min(100, Math.max(30,  Math.round(d.Mouth ?? 30))),
+        Head:   clampNum(Math.round(d.Head  ?? WIRE_HEAD_BASE), WIRE_HEAD_MIN, WIRE_HEAD_MAX),
+        Mouth:  clampNum(Math.round(d.Mouth ?? WIRE_MOUTH_MIN), WIRE_MOUTH_MIN, WIRE_MOUTH_MAX),
         Analog: {
           x: Math.min(1, Math.max(-1, +(d.Analog?.x ?? 0).toFixed(3))),
           y: Math.min(1, Math.max(-1, +(d.Analog?.y ?? 0).toFixed(3))),
@@ -1340,7 +1638,7 @@ async function sendToAI(text) {
     typing.remove();
 
     if (data.error) {
-      showSystemMsg(`API error: ${data.error}`);
+      showSystemMsg(`AI ผิดพลาด: ${data.error}`);
       aiHistory.pop();
     } else {
       aiHistory.push({ role: 'assistant', content: data.content });
@@ -1352,7 +1650,7 @@ async function sendToAI(text) {
     }
   } catch (err) {
     typing.remove();
-    showSystemMsg(`Network error: ${err.message}`);
+    showSystemMsg(`เครือข่ายผิดพลาด: ${err.message}`);
     aiHistory.pop();
   } finally {
     state.aiTyping = false;
@@ -1368,15 +1666,15 @@ function initSocket() {
   socket.on('room-joined', ({ roomId, peers: existingPeers }) => {
     currentRoomId = roomId;
     if (existingPeers.length) {
-      setRoomStatus(`Connecting to peer(s)…`, false);
+      setRoomStatus(`กำลังเชื่อมต่อกับคู่สนทนา…`, false);
       existingPeers.forEach((pid) => startCall(pid, true));
     } else {
-      setRoomStatus('Waiting for someone to join…', false);
+      setRoomStatus('กำลังรอให้อีกฝ่ายเข้าร่วม…', false);
     }
   });
 
   socket.on('peer-joined', (peerId) => {
-    showSystemMsg('Peer joined — establishing connection…');
+    showSystemMsg('คู่สนทนาเข้าร่วมแล้ว — กำลังเชื่อมต่อ…');
     announceAccessibility('คู่สนทนาเข้าร่วมแล้ว');
     startCall(peerId, false);
   });
@@ -1404,13 +1702,15 @@ function initSocket() {
   socket.on('peer-left', (peerId) => {
     cleanupPeer(peerId);
     peerTTSEnabled = false; // reset when peer leaves; new peer starts fresh
-    setRoomStatus('Peer disconnected — waiting…', false);
-    showSystemMsg('Peer left the room.');
+    setRoomStatus('คู่สนทนาตัดการเชื่อมต่อ — กำลังรอ…', false);
+    showSystemMsg('คู่สนทนาออกจากห้องแล้ว');
     announceAccessibility('คู่สนทนาออกจากห้องแล้ว');
+    setFaceWaitingVisible(true);
   });
 
   socket.on('chat-message', ({ from, message }) => {
-    const wrap = appendMessage('Peer', message, 'peer');
+    console.log('[Chat] received via socket relay:', message);
+    const wrap = appendMessage('คู่สนทนา', message, 'peer');
     speakPeerMessage(message);
   });
 
@@ -1419,15 +1719,15 @@ function initSocket() {
   socket.on('peer-tts', ({ enabled }) => {
     peerTTSEnabled = enabled;
     showSystemMsg(enabled
-      ? "Peer enabled voice for their messages — they'll be read aloud here."
-      : 'Peer stopped voicing their messages.');
+      ? 'คู่สนทนาเปิดเสียงข้อความของตัวเองแล้ว — ข้อความของเขาจะถูกอ่านออกเสียงที่นี่'
+      : 'คู่สนทนาปิดเสียงข้อความของตัวเองแล้ว');
     // On mobile, speechSynthesis is blocked until a user gesture. Prompt the user
     // to tap so audio works before the first message arrives.
     if (enabled && IS_MOBILE && !ttsUnlocked) showTapToUnlockAudio();
   });
 
   socket.on('connect_error', (e) => {
-    showSystemMsg(`Connection error: ${e.message}`);
+    showSystemMsg(`เชื่อมต่อผิดพลาด: ${e.message}`);
   });
 }
 
@@ -1438,10 +1738,18 @@ function createPeerConnection(peerId) {
   // Use the fetched ICE config (includes TURN servers for cross-network)
   const currentIceConfig = buildIceConfig(iceConfig.iceServers);
   const pc = new RTCPeerConnection(currentIceConfig);
-  peers[peerId] = { pc, dc: null };
+  peers[peerId] = { pc, dc: null, audioSender: null };
+
+  // Reserve the audio m-line up front (even with no track yet) so mobile STT
+  // can later pause/resume the mic via replaceTrack() without needing SDP
+  // renegotiation — this app never wires up onnegotiationneeded.
+  const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
+  peers[peerId].audioSender = audioTransceiver.sender;
+  const localAudioTrack = state.localStream ? state.localStream.getAudioTracks()[0] : null;
+  if (localAudioTrack) audioTransceiver.sender.replaceTrack(localAudioTrack).catch(() => {});
 
   if (state.localStream) {
-    state.localStream.getTracks().forEach((t) => pc.addTrack(t, state.localStream));
+    state.localStream.getVideoTracks().forEach((t) => pc.addTrack(t, state.localStream));
   }
 
   // Remote stream display
@@ -1451,9 +1759,10 @@ function createPeerConnection(peerId) {
     remoteVideo.srcObject = remoteStream;
     remoteVideo.classList.add('active');
     aiAvatar.style.display = 'none';
-    remoteName.textContent = 'Peer';
-    setRoomStatus('Connected ●', true);
+    remoteName.textContent = 'คู่สนทนา';
+    setRoomStatus('เชื่อมต่อแล้ว ●', true);
     announceAccessibility('เชื่อมต่อแล้ว พร้อมพูดคุย');
+    setFaceWaitingVisible(false);
   };
 
   pc.onicecandidate = ({ candidate }) => {
@@ -1464,11 +1773,12 @@ function createPeerConnection(peerId) {
     const s = pc.iceConnectionState;
     console.log('ICE state:', s);
     if (s === 'failed') {
-      showSystemMsg('WebRTC connection failed. If peers are on different networks, check that TURN servers are reachable.');
+      showSystemMsg('การเชื่อมต่อ WebRTC ล้มเหลว หากคู่สนทนาอยู่คนละเครือข่าย ให้ตรวจสอบว่า TURN server เชื่อมต่อได้');
       pc.restartIce();
     }
     if (s === 'disconnected') {
-      setRoomStatus('Connection interrupted…', false);
+      setRoomStatus('การเชื่อมต่อขาดหาย…', false);
+      setFaceWaitingVisible(true);
     }
   };
 
@@ -1482,8 +1792,12 @@ function setupDataChannel(peerId, dc) {
   peers[peerId].dc = dc;
   dc.onopen = () => console.log('Data channel open with', peerId);
   dc.onmessage = (e) => {
-    if (applyRobotPayload(e.data)) return;  // robot control — don't show as chat
-    const wrap = appendMessage('Peer', e.data, 'peer');
+    if (applyRobotPayload(e.data)) {
+      console.log('[Chat] data channel message treated as robot payload, not chat:', e.data);
+      return;
+    }
+    console.log('[Chat] received via data channel:', e.data);
+    const wrap = appendMessage('คู่สนทนา', e.data, 'peer');
     speakPeerMessage(e.data);
   };
   dc.onerror = (e) => console.warn('DC error:', e);
@@ -1508,7 +1822,7 @@ function cleanupPeer(peerId) {
   remoteVideo.classList.remove('active');
   if (state.mode === 'person') {
     aiAvatar.style.display = 'none';
-    remoteName.textContent = 'Waiting for peer…';
+    remoteName.textContent = 'กำลังรอคู่สนทนา…';
   }
 }
 
@@ -1518,9 +1832,15 @@ function sendToPeer(text) {
   Object.values(peers).forEach(({ dc }) => {
     if (dc && dc.readyState === 'open') { dc.send(text); dcSent = true; }
   });
+  if (dcSent) {
+    console.log('[Chat] sent via data channel:', text);
+  }
   // Only fall back to socket relay when no data channel is open
   if (!dcSent && currentRoomId) {
+    console.log('[Chat] sent via socket relay to room', currentRoomId + ':', text);
     socket.emit('chat-message', { roomId: currentRoomId, message: text });
+  } else if (!dcSent) {
+    console.warn('[Chat] could NOT send — no open data channel and no currentRoomId:', text);
   }
 }
 
@@ -1532,9 +1852,9 @@ function generateRoomCode() {
   roomCodeDisplay.textContent = code;
   currentRoomId = code;
   socket.emit('join-room', code);
-  setRoomStatus('Waiting for someone to join…', false);
+  setRoomStatus('กำลังรอให้อีกฝ่ายเข้าร่วม…', false);
   aiAvatar.style.display = 'none';
-  remoteName.textContent = 'Waiting for peer…';
+  remoteName.textContent = 'กำลังรอคู่สนทนา…';
   announceAccessibility(`รหัสห้องของคุณคือ ${code.split('').join(' ')}`);
 }
 
@@ -1547,9 +1867,9 @@ function joinRoom(code) {
   roomCodeDisplay.textContent = c;
   joinInput.value = '';
   socket.emit('join-room', c);
-  setRoomStatus(`Joining room ${c}…`, false);
+  setRoomStatus(`กำลังเข้าร่วมห้อง ${c}…`, false);
   aiAvatar.style.display = 'none';
-  remoteName.textContent = 'Connecting…';
+  remoteName.textContent = 'กำลังเชื่อมต่อ…';
 }
 
 function setRoomStatus(text, connected) {
@@ -1562,12 +1882,12 @@ function endCall() {
   Object.keys(peers).forEach(cleanupPeer);
 
   if (state.mode === 'ai') {
-    remoteName.textContent = 'AI Assistant';
+    remoteName.textContent = 'ผู้ช่วย AI';
     aiHistory.length = 0;
-    showSystemMsg('Conversation reset.');
+    showSystemMsg('เริ่มบทสนทนาใหม่แล้ว');
   } else {
     joinRoom('FACE');
-    showSystemMsg('Call ended. Rejoining room FACE…');
+    showSystemMsg('วางสายแล้ว กำลังกลับเข้าห้อง FACE…');
   }
 }
 
@@ -1575,6 +1895,11 @@ function endCall() {
 //  SETTINGS MODAL
 // ════════════════════════════════════════════════
 function populateSettingsForm() {
+  $('s-show-ai-mode').checked = !!settings.showAiMode;
+  $('s-show-detect-btn').checked = !!settings.showDetectButton;
+  $('s-show-timing-log').checked = !!settings.showTimingLog;
+  $('s-dpad-speed').value = settings.dpadSpeed || '1';
+  $('s-remote-rotation').value = settings.remoteRotation || '0';
   $('s-provider').value  = settings.provider;
   $('s-baseurl').value   = settings.baseUrl;
   $('s-apikey').value    = settings.apiKey;
@@ -1584,7 +1909,6 @@ function populateSettingsForm() {
   $('s-tts').checked     = settings.ttsEnabled;
   $('s-rate').value      = settings.ttsRate;
   $('rate-val').textContent = settings.ttsRate;
-  $('s-voice-gender').value = settings.voiceGender || 'male';
   $('s-mqtt-url').value   = settings.mqttUrl   || '';
   $('s-mqtt-topic').value = settings.mqttTopic || 'robot/control';
   $('s-turn-url').value  = settings.turnUrl  || '';
@@ -1595,6 +1919,11 @@ function populateSettingsForm() {
 
 function readSettingsForm() {
   return {
+    showAiMode:       $('s-show-ai-mode').checked,
+    showDetectButton: $('s-show-detect-btn').checked,
+    showTimingLog:    $('s-show-timing-log').checked,
+    dpadSpeed:        $('s-dpad-speed').value,
+    remoteRotation:   $('s-remote-rotation').value,
     provider:     $('s-provider').value,
     baseUrl:      $('s-baseurl').value || DEFAULT_SETTINGS.baseUrl,
     apiKey:       $('s-apikey').value,
@@ -1603,7 +1932,6 @@ function readSettingsForm() {
     sttMode:      $('s-stt-mode').value,
     ttsEnabled:   $('s-tts').checked,
     ttsRate:      parseFloat($('s-rate').value),
-    voiceGender:  $('s-voice-gender').value,
     mqttUrl:      $('s-mqtt-url').value.trim(),
     mqttTopic:    $('s-mqtt-topic').value.trim() || 'robot/control',
     turnUrl:      $('s-turn-url').value.trim(),
@@ -1646,11 +1974,44 @@ function toggleBaseUrlField(provider) {
   }
 }
 
-function openSettingsModal()  { populateSettingsForm(); settingsOverlay.classList.add('open'); }
-function closeSettingsModal() { settingsOverlay.classList.remove('open'); }
+// ── Modal focus management (a11y) ──────────────────────────
+// Remembers what had focus before a modal opened so it can be restored on
+// close, and keeps Tab from leaking focus out of the open modal.
+let modalReturnFocusEl = null;
 
-function openHelpModal()  { $('help-overlay').classList.add('open'); }
-function closeHelpModal() { $('help-overlay').classList.remove('open'); }
+function openModal(overlayEl, focusTargetId) {
+  modalReturnFocusEl = document.activeElement;
+  overlayEl.classList.add('open');
+  requestAnimationFrame(() => $(focusTargetId)?.focus());
+}
+
+function closeModal(overlayEl) {
+  overlayEl.classList.remove('open');
+  if (modalReturnFocusEl && document.body.contains(modalReturnFocusEl)) modalReturnFocusEl.focus();
+  modalReturnFocusEl = null;
+}
+
+function trapModalFocus(e) {
+  const overlay = settingsOverlay.classList.contains('open') ? settingsOverlay
+                : $('help-overlay').classList.contains('open') ? $('help-overlay')
+                : null;
+  if (!overlay) return;
+  const focusables = Array.prototype.filter.call(
+    overlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'),
+    (el) => !el.disabled && el.offsetParent !== null
+  );
+  if (!focusables.length) return;
+  const first = focusables[0];
+  const last  = focusables[focusables.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+
+function openSettingsModal()  { populateSettingsForm(); openModal(settingsOverlay, 'settings-close-btn'); }
+function closeSettingsModal() { closeModal(settingsOverlay); }
+
+function openHelpModal()  { openModal($('help-overlay'), 'help-close-btn'); }
+function closeHelpModal() { closeModal($('help-overlay')); }
 
 // ════════════════════════════════════════════════
 //  INPUT HELPERS
@@ -1670,10 +2031,29 @@ function bindEventListeners() {
 
   micBtn.addEventListener('click', toggleMic);
   videoBtn.addEventListener('click', toggleCam);
+  // 90°/270° rotation sizes the video from the wrap's dimensions — track resizes
+  window.addEventListener('resize', applyRemoteRotation);
   speechBtn.addEventListener('click', toggleSpeech);
   detectBtn.addEventListener('click', toggleDetect);
-  endBtn.addEventListener('click', endCall);
+  endBtn.addEventListener('click', () => {
+    // Only confirm when there's an actual peer connected — in AI mode, or
+    // person mode before anyone joined, End is non-destructive (just resets).
+    const hasActiveCall = state.mode === 'person' && Object.keys(peers).length > 0;
+    if (hasActiveCall && !confirm('ต้องการวางสายและตัดการเชื่อมต่อกับคู่สนทนาหรือไม่?')) return;
+    endCall();
+  });
   $('peer-tts-btn').addEventListener('click', togglePeerTTS);
+
+  document.addEventListener('keydown', (e) => {
+    if (!isModalOpen()) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (settingsOverlay.classList.contains('open')) closeSettingsModal();
+      else closeHelpModal();
+    } else if (e.key === 'Tab') {
+      trapModalFocus(e);
+    }
+  });
 
   sendBtn.addEventListener('click', sendMessage);
   chatInput.addEventListener('keydown', (e) => {
@@ -1686,8 +2066,8 @@ function bindEventListeners() {
 
   copyCodeBtn.addEventListener('click', () => {
     navigator.clipboard.writeText(roomCodeDisplay.textContent).then(() => {
-      copyCodeBtn.textContent = 'Copied!';
-      setTimeout(() => (copyCodeBtn.textContent = 'Copy'), 1500);
+      copyCodeBtn.textContent = 'คัดลอกแล้ว!';
+      setTimeout(() => (copyCodeBtn.textContent = 'คัดลอก'), 1500);
     });
   });
 
@@ -1705,9 +2085,13 @@ function bindEventListeners() {
     settings = readSettingsForm();
     persistSettings(settings);
     closeSettingsModal();
-    showSystemMsg('Settings saved.');
-    // Re-connect MQTT if broker URL changed while in robot mode
-    if (state.mode === 'robot') connectMQTT();
+    showSystemMsg('บันทึกการตั้งค่าแล้ว');
+    applyAiModeVisibility();
+    if (!settings.showAiMode && state.mode === 'ai') applyMode('person');
+    applyDetectButtonVisibility();
+    applyRemoteRotation();
+    // Re-connect MQTT if broker URL changed while in person mode (manual robot controls)
+    if (state.mode === 'person') connectMQTT();
   });
 
   $('s-provider').addEventListener('change', (e) => toggleBaseUrlField(e.target.value));
@@ -1727,11 +2111,6 @@ function bindEventListeners() {
 // ════════════════════════════════════════════════
 //  START
 // ════════════════════════════════════════════════
-// Also save session when the call is manually ended
-const _origEndCall = endCall;
-// endCall is defined above — wrap it to also flush session time
-// (we don't overwrite endCall to avoid circular ref; handled via beforeunload too)
-
 window.addEventListener('DOMContentLoaded', () => {
   initLoginScreen();   // show login first; it calls initApp() after success
 });

@@ -124,7 +124,8 @@ app.post('/api/stt', express.raw({ type: '*/*', limit: '25mb' }), async (req, re
   const ext = mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mp4') ? 'mp4' : 'webm';
   try {
     const formData = new FormData();
-    formData.append('file', new File([req.body], `audio.${ext}`, { type: mimeType }));
+    // Blob (not File) — the File global only exists from Node 20; Blob + filename works on Node 18+
+    formData.append('file', new Blob([req.body], { type: mimeType }), `audio.${ext}`);
     formData.append('model', 'whisper-large-v3-turbo');
     formData.append('language', 'th');
     formData.append('response_format', 'json');

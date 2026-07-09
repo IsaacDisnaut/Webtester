@@ -200,7 +200,7 @@
   --danger: #ef4444;
   --danger-glow: rgba(239, 68, 68, 0.35);
   --text: #e2e8f0;
-  --text-muted: #64748b;
+  --text-muted: #7d8ba3;
   --text-dim: #94a3b8;
   --you-bubble: #1e3a5f;
   --ai-bubble: #1e2d40;
@@ -363,6 +363,18 @@ body {
   background: #050810;
   position: relative;
   min-height: 0;
+}
+
+/* Video/robot stage — positioning context for the local PiP and the
+   floating controls bar, so they anchor to the video area itself and
+   never overlap the room bar above or the person-mode robot-controls
+   bar below. */
+.video-stage {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  position: relative;
 }
 
 /* Room bar */
@@ -548,7 +560,7 @@ body {
   position: absolute;
   bottom: 4px;
   left: 6px;
-  font-size: .7rem;
+  font-size: .75rem;
   color: rgba(255,255,255,.7);
   pointer-events: none;
 }
@@ -580,7 +592,7 @@ body {
   background: var(--card);
   color: var(--text);
   cursor: pointer;
-  font-size: .65rem;
+  font-size: .72rem;
   transition: all .18s;
   justify-content: center;
 }
@@ -589,7 +601,7 @@ body {
 .ctrl-btn.danger { background: var(--danger); color: #fff; }
 .ctrl-btn.danger:hover { background: #dc2626; box-shadow: 0 0 16px var(--danger-glow); }
 .ctrl-btn.active-speech { background: rgba(108,99,255,.25); color: var(--primary); }
-.ctrl-label { font-size: .6rem; }
+.ctrl-label { font-size: .68rem; }
 
 /* ── Chat Column ─────────────────────────────────────────── */
 .chat-col {
@@ -648,7 +660,7 @@ body {
 .chat-welcome {
   text-align: center;
   color: var(--text-muted);
-  font-size: .85rem;
+  font-size: .95rem;
   padding: 20px;
   margin: auto;
 }
@@ -663,7 +675,7 @@ body {
 .msg.ai, .msg.peer { align-self: flex-start; align-items: flex-start; }
 
 .msg-sender {
-  font-size: .7rem;
+  font-size: .75rem;
   color: var(--text-muted);
   margin-bottom: 3px;
   padding: 0 4px;
@@ -672,7 +684,7 @@ body {
 .msg-bubble {
   padding: 9px 13px;
   border-radius: 14px;
-  font-size: .88rem;
+  font-size: .95rem;
   line-height: 1.5;
   word-break: break-word;
   white-space: pre-wrap;
@@ -697,7 +709,7 @@ body {
 .msg.you .msg-footer { justify-content: flex-end; }
 
 .msg-time {
-  font-size: .68rem;
+  font-size: .72rem;
   color: var(--text-muted);
 }
 
@@ -732,6 +744,13 @@ body {
   border-color: var(--primary);
   color: var(--primary);
   box-shadow: 0 0 10px rgba(108,99,255,.3);
+}
+.peer-tts-status {
+  font-size: .68rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* Typing indicator */
@@ -775,7 +794,7 @@ body {
   border-radius: var(--radius-sm);
   color: var(--text);
   padding: 9px 12px;
-  font-size: .88rem;
+  font-size: .95rem;
   font-family: inherit;
   resize: none;
   outline: none;
@@ -962,7 +981,7 @@ body {
 /* Timing log badge — no side lines, monospace, dimmer */
 .timing-log {
   font-family: monospace;
-  font-size: .68rem;
+  font-size: .72rem;
   color: #6b7280;
   letter-spacing: .02em;
 }
@@ -1052,6 +1071,26 @@ body {
   pointer-events: none;
 }
 
+/* Customer-facing "waiting for staff" overlay — only ever shown on the
+   /face kiosk screen (body.face-mode), never on the operator's own AI-mode
+   robot preview. Hidden once a peer's media actually starts flowing. */
+.face-waiting-status {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  font-size: 1.15rem;
+  color: #fff;
+  background: rgba(0,0,0,.5);
+  pointer-events: none;
+}
+body.face-mode .face-waiting-status.visible {
+  display: flex;
+}
+
 /* Controls row */
 .robot-controls-row {
   display: flex;
@@ -1061,6 +1100,13 @@ body {
   gap: 8px;
   flex-shrink: 0;
 }
+
+/* Person-mode robot control bar (joystick + MQTT status + D-pad) */
+#person-robot-bar {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+}
 .robot-ctrl-group {
   display: flex;
   flex-direction: column;
@@ -1068,7 +1114,7 @@ body {
   gap: 6px;
 }
 .robot-ctrl-label {
-  font-size: .68rem;
+  font-size: .75rem;
   color: var(--text-muted);
   letter-spacing: .5px;
   text-align: center;
@@ -1170,7 +1216,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: .7rem;
+  font-size: .75rem;
   color: var(--text-muted);
   max-width: 110px;
   text-align: center;
@@ -1198,7 +1244,8 @@ body.face-mode .room-bar,
 body.face-mode .local-wrap,
 body.face-mode .remote-wrap,
 body.face-mode #login-screen,
-body.face-mode .robot-controls-row {
+body.face-mode .robot-controls-row,
+body.face-mode .controls {
   display: none !important;
 }
 body.face-mode .main {
@@ -1224,12 +1271,33 @@ body.face-mode .robot-face-wrap {
   background: #000;
 }
 
+/* ── Keyboard focus ──────────────────────────────────────── */
+/* Buttons reset `outline: none` for mouse users elsewhere; give keyboard
+   users a clearly visible ring instead of relying on default browser outline. */
+.ctrl-btn:focus-visible,
+.icon-btn:focus-visible,
+.mode-btn:focus-visible,
+.dpad-btn:focus-visible,
+.dpad-center:focus-visible,
+.btn:focus-visible,
+.btn-sm:focus-visible,
+.send-btn:focus-visible,
+.login-btn:focus-visible,
+.help-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 /* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .main { grid-template-columns: 1fr 300px; }
+}
+
 @media (max-width: 680px) {
-  .main { grid-template-columns: 1fr; grid-template-rows: 1fr 280px; }
+  .main { grid-template-columns: 1fr; grid-template-rows: 1fr 320px; }
   .chat-col { border-left: none; border-top: 1px solid var(--border); }
   .local-wrap { width: 110px; height: 80px; bottom: 68px; }
   .joystick-base { width: 88px; height: 88px; }
-  .dpad-btn { width: 36px; height: 36px; font-size: .95rem; }
-  .dpad-center { width: 30px; height: 30px; }
+  .dpad-btn { width: 44px; height: 44px; font-size: 1rem; }
+  .dpad-center { width: 38px; height: 38px; }
 }
