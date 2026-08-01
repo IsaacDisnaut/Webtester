@@ -34,7 +34,7 @@ if not exist "%~dp0videocall\node_modules" (
 )
 
 :: ── Start Mosquitto (local MQTT broker) ──
-echo [1/4] Starting local Mosquitto MQTT broker...
+echo [1/5] Starting local Mosquitto MQTT broker...
 set MOSQ_EXE=C:\Program Files\Mosquitto\mosquitto.exe
 if exist "%MOSQ_EXE%" (
     start "Mosquitto MQTT" cmd /k ""%MOSQ_EXE%" -c "%~dp0mosquitto\mosquitto-local.conf" -v"
@@ -46,12 +46,22 @@ if exist "%MOSQ_EXE%" (
 )
 
 :: ── Start Node.js server in a new window ──
-echo [2/4] Starting Node.js server on port 3000...
+echo [2/5] Starting Node.js server on port 3000...
 start "VideoCall Server" cmd /k "cd /d "%~dp0videocall" && set NODE_ENV=production&& set PORT=3000&& node server.js"
 timeout /t 4 /nobreak >nul
 
+:: ── Start deep.py (MQTT -> Arduino serial bridge) ──
+echo [3/5] Starting deep.py robot bridge...
+where python >nul 2>&1
+if %errorlevel% equ 0 (
+    start "Robot Bridge (deep.py)" cmd /k "cd /d "%~dp0" && python deep.py"
+    echo [INFO] deep.py started ^(MQTT bridge to Arduino — retries broker every 5s if not ready^)
+) else (
+    echo [WARN] Python not found, skipping deep.py robot bridge.
+)
+
 :: ── Optionally start YOLO detection server ──
-set /p START_YOLO="[3/4] Start YOLO detection server too? (y/n): "
+set /p START_YOLO="[4/5] Start YOLO detection server too? (y/n): "
 if /i "%START_YOLO%"=="y" (
     where python >nul 2>&1
     if %errorlevel% equ 0 (
@@ -65,7 +75,7 @@ if /i "%START_YOLO%"=="y" (
 
 :: ── Start Cloudflare Tunnel ──
 echo.
-echo [4/4] Starting Cloudflare Tunnel...
+echo [5/5] Starting Cloudflare Tunnel...
 echo       Your public HTTPS URL will appear below ^(look for "trycloudflare.com"^):
 echo       MQTT จะทำงานผ่าน URL เดียวกันที่ path /ws/mqtt อัตโนมัติ
 echo  ----------------------------------------------------------

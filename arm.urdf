@@ -1,0 +1,217 @@
+<robot name="servoarm">
+  <!-- หน่วย: เมตร (ตามสเปค URDF) — วัดจากหุ่นจริง 2026-07:
+         joint1 (ฐานหมุน) และ joint2 (ไหล่) อยู่จุดเดียวกัน สูง 0.095 จากพื้น
+         link1: joint2 -> joint3 (ศอก)               = 0.105
+         link2: joint3 -> joint4≡joint5 (ข้อมือ)     = 0.127  (joint4 อยู่จุดเดียวกับ joint5)
+         link3: joint5 -> จุดจับกึ่งกลางกริปเปอร์     = 0.175  (ดู TIP_Y ใน robot_arm_ai.py)
+       ทุก link ยื่นตามแกน +y ของเฟรมตัวเอง / rpy z=1.5 ของ joint1 ผูกกับ _yaw_off ในโค้ด
+       mesh ใน robot_meshes ปั้นไว้ตามสัดส่วนหุ่นตัวเก่า จึงเป็นของประกอบสายตาเท่านั้น:
+       scale ด้านล่างจูนให้ความยาวแต่ละชิ้นใกล้ความยาว link ของมัน สัดส่วนอื่นไม่ตรงของจริง
+       โครง kinematics ที่ถูกต้องยึดตาม origin ของ joint และมุมมองก้าน linkage เท่านั้น
+
+       มอเตอร์: MG996R ทุกข้อ (servo 180°)
+         - ทุกข้อจึงหมุนได้ไม่เกิน 180° (3.1416 rad) ห้ามตั้ง lower..upper กว้างกว่านี้
+         - "หน้าต่าง" 180° จะไปตกอยู่ช่วงมุมไหน ขึ้นกับการประกอบหน้าแปลน (horn) ไม่ใช่ตัวมอเตอร์
+           => joint4 ตั้งเป็น [-180°, 0°] ไม่ใช่ ±90° เพราะท่าที่หุ่นต้องใช้จริงอยู่แถว -90° ถึง -100°
+              ถ้าประกอบเป็น ±90° จะจับของแนวดิ่งไม่ได้เลย (ดู IK_explained.pdf หน้า 7)
+         - effort = แรงบิดสตอลล์ ~9.4 kg·cm ที่ 4.8V = 0.92 N·m
+         - velocity = 0.17 s/60° ที่ 4.8V = 6.16 rad/s (ตอนมีโหลดจะช้ากว่านี้มาก) -->
+
+  <link name="base_link">
+	<visual>
+         <geometry>
+          <mesh filename="robot_meshes/base_cylinder.stl" scale ="0.0000042 0.0000042 0.0000042"/>
+         </geometry>
+         <origin xyz="0 0 0.003"/>
+         <material name="black">
+           <color rgba="0 0 0 1"/>
+         </material>
+        </visual>
+	<collision>
+         <geometry>
+          <mesh filename="robot_meshes/base_cylinder.stl" scale ="0.0000042 0.0000042 0.0000042"/>
+         </geometry>
+         <origin xyz="0 0 0.003"/>
+        </collision>
+  </link>
+
+  <link name="platform">
+	<visual>
+         <geometry>
+          <mesh filename="robot_meshes/top_plate.stl" scale ="0.000073 0.000073 0.000073"/>
+         </geometry>
+         <origin xyz="0 0 0"/>
+         <material name="black"/>
+        </visual>
+	<collision>
+         <geometry>
+          <mesh filename="robot_meshes/top_plate.stl" scale ="0.000073 0.000073 0.000073"/>
+         </geometry>
+         <origin xyz="0 0 0"/>
+        </collision>
+  </link>
+
+  <link name="lower_arm">
+	<visual>
+         <geometry>
+          <mesh filename="robot_meshes/lower_arm.stl" scale ="0.000089 0.000089 0.000089"/>
+         </geometry>
+         <origin xyz="0 0 0"/>
+         <material name="black"/>
+        </visual>
+	<collision>
+         <geometry>
+          <mesh filename="robot_meshes/lower_arm.stl" scale ="0.000089 0.000089 0.000089"/>
+         </geometry>
+         <origin xyz="0 0 0"/>
+        </collision>
+  </link>
+
+  <link name="top_arm">
+	<visual>
+         <geometry>
+          <mesh filename="robot_meshes/top_arm.stl" scale ="0.000074 0.000074 0.000074"/>
+         </geometry>
+         <origin rpy="0 1.59 0" xyz="0 0 0"/>
+         <material name="black"/>
+        </visual>
+	<collision>
+         <geometry>
+          <mesh filename="robot_meshes/top_arm.stl" scale ="0.000074 0.000074 0.000074"/>
+         </geometry>
+         <origin rpy="0 1.59 0" xyz="0 0 0"/>
+        </collision>
+  </link>
+
+  <!-- joint4 อยู่จุดเดียวกับ joint5 — link นี้จึงยาว 0 (เหลือไว้เป็นเฟรม pitch ของข้อมือ) -->
+  <link name="wrist">
+	<visual>
+         <geometry>
+          <mesh filename="robot_meshes/wrist.stl" scale ="0.00005 0.00005 0.00005"/>
+         </geometry>
+         <origin rpy="0 0 0" xyz="0 0 0"/>
+         <material name="black"/>
+        </visual>
+	<collision>
+         <geometry>
+          <mesh filename="robot_meshes/wrist.stl" scale ="0.00005 0.00005 0.00005"/>
+         </geometry>
+         <origin rpy="0 0 0" xyz="0 0 0"/>
+        </collision>
+  </link>
+
+  <link name="clawbase">
+	<visual>
+         <geometry>
+          <mesh filename="robot_meshes/clawbase.stl" scale ="0.0001 0.0001 0.0001"/>
+         </geometry>
+         <origin rpy="0 3.18 0" xyz="0 0 0"/>
+         <material name="white">
+           <color rgba="1 1 1 1"/>
+         </material>
+        </visual>
+	<collision>
+         <geometry>
+          <mesh filename="robot_meshes/clawbase.stl" scale ="0.0001 0.0001 0.0001"/>
+         </geometry>
+         <origin rpy="0 3.18 0" xyz="0 0 0"/>
+        </collision>
+  </link>
+
+  <link name="clawr">
+	<visual>
+         <geometry>
+          <mesh filename="robot_meshes/clawr.stl" scale ="0.00008 0.00008 0.00008"/>
+         </geometry>
+         <origin rpy="0 0 0" xyz="0 0 0"/>
+         <material name="white"/>
+        </visual>
+	<collision>
+         <geometry>
+          <mesh filename="robot_meshes/clawr.stl" scale ="0.00008 0.00008 0.00008"/>
+         </geometry>
+         <origin rpy="0 0 0" xyz="0 0 0"/>
+        </collision>
+  </link>
+
+  <link name="clawl">
+	<visual>
+         <geometry>
+          <mesh filename="robot_meshes/clawl.stl" scale ="0.00008 0.00008 0.00008"/>
+         </geometry>
+         <material name="white"/>
+         <origin rpy="0 0 0" xyz="0 0 0"/>
+        </visual>
+	<collision>
+         <geometry>
+          <mesh filename="robot_meshes/clawl.stl" scale ="0.00008 0.00008 0.00008"/>
+         </geometry>
+         <origin rpy="0 0 0" xyz="0 0 0"/>
+        </collision>
+  </link>
+
+  <!-- ฐานหมุน — จุดเดียวกับ joint2 สูง 0.095 จากพื้น -->
+  <joint name="joint1" type="revolute">
+    <axis xyz="0 0 1" />
+    <limit effort="0.92" lower="1.56" upper="4.68" velocity="6.16" />
+    <parent link="base_link"/>
+    <child link="platform"/>
+    <origin rpy="0 0 1.5" xyz="0 0 0.095"/>
+  </joint>
+
+  <!-- ไหล่ — origin (0,0,0) = อยู่จุดเดียวกับ joint1 -->
+  <joint name="joint2" type="revolute">
+    <axis xyz="1 0 0" />
+    <limit effort="0.92" lower="0.0" upper="3.12" velocity="6.16" />
+    <parent link="platform"/>
+    <child link="lower_arm"/>
+    <origin xyz="0 0 0"/>
+  </joint>
+
+  <!-- ศอก — link1 = 0.105 -->
+  <joint name="joint3" type="revolute">
+    <axis xyz="1 0 0" />
+    <limit effort="0.92" lower="-1.5708" upper="1.5708" velocity="6.16" />
+    <parent link="lower_arm"/>
+    <child link="top_arm"/>
+    <origin xyz="0 0.105 0"/>
+  </joint>
+
+  <!-- ข้อมือก้ม-เงย — link2 = 0.127 -->
+  <joint name="joint4" type="revolute">
+    <axis xyz="1 0 0" />
+    <limit effort="0.92" lower="-3.1416" upper="0.0" velocity="6.16" />
+    <parent link="top_arm"/>
+    <child link="wrist"/>
+    <origin xyz="0 0.127 0"/>
+  </joint>
+
+  <!-- หมุนกริปเปอร์ (roll) — origin (0,0,0) = อยู่จุดเดียวกับ joint4 -->
+  <joint name="joint5" type="revolute">
+    <axis xyz="0 1 0" />
+    <limit effort="0.92" lower="-3.1416" upper="0.0" velocity="6.16" />
+    <parent link="wrist"/>
+    <child link="clawbase"/>
+    <origin xyz="0 0 0"/>
+  </joint>
+
+  <!-- นิ้วกริปเปอร์ — origin y=0.13 + นิ้วยาว ~0.09 ทำให้จุดจับ (TIP_Y=0.175) อยู่กลางนิ้วพอดี
+       ระยะ x = ±0.025 คือครึ่งช่วงอ้านิ้ว ใช้เป็น CLAW_HALF_W ตอนเช็คนิ้วชนของ -->
+  <joint name="joint6" type="revolute">
+    <axis xyz="0 0 -1" />
+    <limit effort="0.92" lower="-0.5" upper="0.0" velocity="6.16" />
+    <parent link="clawbase"/>
+    <child link="clawr"/>
+    <origin rpy="0 0 -0.15" xyz="0.025 0.13 0"/>
+  </joint>
+
+  <joint name="joint7" type="revolute">
+    <axis xyz="0 0 -1" />
+    <limit effort="0.92" lower="-0.5" upper="0.0" velocity="6.16" />
+    <parent link="clawbase"/>
+    <child link="clawl"/>
+    <origin rpy="0 0 0.15" xyz="-0.025 0.13 0"/>
+    <mimic joint="joint6" multiplier="-1" offset="0" />
+  </joint>
+
+</robot>

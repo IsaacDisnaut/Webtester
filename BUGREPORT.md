@@ -199,3 +199,74 @@ Test harness (สร้างใหม่สำหรับรอบนี้) �
 รีวิว diff ที่ยังไม่ commit ทั้งหมด (~870 บรรทัดใน `app.js`, `deep.py`, `server.js`, `index.html`, `style.css`): keyboard controls (Arrow/WASD/Alt), mobile mic release/reacquire ผ่าน reserved audio transceiver (`replaceTrack` ไม่ต้อง renegotiate), MQTT publish throttle ~15 Hz แบบ trailing-edge, command coalescing + `drain_serial()` ใน `deep.py`, modal focus trap, `/face` waiting status, remote video rotation — ทั้งหมดสอดคล้องกับ wire format canonical และไม่กระทบ fix เดิม. จุดเล็กที่สังเกต (ไม่ใช่บั๊ก): `connectMQTT()` ถูกเรียกซ้ำตอน boot (จาก `applyMode('person')` แล้วซ้ำจาก `initApp`) แต่ฟังก์ชันปิด client เก่าก่อนเสมอจึงไม่มีผลเสีย.
 
 **สรุป: ณ 2026-07-09 ไม่พบบั๊กที่ยัง active ในโค้ด** — เหลือเพียงรายการ ⏳ ใน "Minor notes" ซึ่งเป็นเรื่อง hardening ก่อน deploy จริง / เอกสารล้าสมัย / โค้ดซ้ำซ้อน ไม่ใช่ defect ที่ทำงานผิด และการทดสอบกับ Arduino จริง (servo centering ของ AI animation) ยังต้องดูหน้างานตามหมายเหตุด้านบน.
+
+---
+
+## รอบเพิ่มฟีเจอร์ Light/Dark mode — ตรวจบั๊ก + การเข้าถึงผู้พิการ (2026-07-27)
+
+- **Scope:** ฟีเจอร์ธีมสี Light (ค่าเริ่มต้น) / Dark ที่เพิ่มใน `videocall/public/style.css`, `index.html`, `app.js` (ดูรายละเอียดฟีเจอร์และรีวิว accessibility เต็มใน [REVIEW.md §22](REVIEW.md))
+- **วิธีตรวจ:** อ่าน diff ที่ยังไม่ commit ทั้งหมดใน 8 มุม (line-by-line, removed-behavior, cross-file, reuse/simplify/efficiency, altitude, conventions) + ไล่ตรวจ contrast ทุกจุดที่วางตัวอักษรบนพื้นที่มืดเสมอ + ยืนยันสถานะบั๊ก accessibility ที่ค้างจากรอบก่อน
+
+### BUG-8 (HIGH — visual/accessibility) — ป้ายชื่อคู่สนทนาอ่านไม่ออกในธีม Light
+
+> ✅ **FIXED** — บังคับ `.remote-name { color:#fff }` เพราะป้ายนี้อยู่บนพื้นวิดีโอมืด (`rgba(0,0,0,.65)`) เสมอไม่ว่าธีมไหน
+
+**File:** [style.css:559-569](videocall/public/style.css#L559-L569) (`.remote-name`)
+
+**สาเหตุ:** `.remote-name` ไม่ได้กำหนด `color` ของตัวเอง จึงสืบทอด `--text` จาก body การเพิ่มธีม Light เปลี่ยน `--text` จากสีอ่อน (`#e2e8f0`) เป็นสีเข้ม (`#1e293b`) ป้ายชื่อจึงกลายเป็นตัวอักษรเข้มบนพื้นดำโปร่งแสง — อ่านไม่ออกเลยในธีมค่าเริ่มต้น
+
+**Impact:** ชื่อคู่สนทนา (เช่น "คู่สนทนา") ที่ทับมุมล่างซ้ายของวิดีโอมองไม่เห็นในธีม Light ซึ่งเป็นค่าเริ่มต้น กระทบผู้ใช้ทุกคนโดยเฉพาะสายตาเลือนราง
+
+**การไล่ตรวจ:** ตรวจ element อื่นที่วางบนพื้นมืดเสมอแล้วสืบทอด `--text` — พบว่ามีจุดนี้จุดเดียว (`.speaking-badge`, `.face-waiting-status`, `.local-label` กำหนดสี/พื้นเข้มของตัวเองไว้แล้ว จึงไม่พัง)
+
+### BUG-9 (MEDIUM — accessibility/contrast) — `--primary` เป็นสีตัวอักษรในธีม Light ต่ำกว่าเกณฑ์ WCAG AA
+
+> ✅ **FIXED (2026-07-27)** — ธีม Light ใช้ `--primary: #574fd6` (~6.0:1 บนพื้นขาว, ~5.4:1 บนพื้น `#f1f5f9`, ตัวอักษรขาวบนปุ่มพื้น primary ~6.0:1 — ผ่าน AA ทุกจุด) และเพิ่ม `--primary-hover` แยกทั้งสองธีม (Light `#463dc0` / Dark `#574fd6`) แทนค่า hover ที่เคย hardcode `#574fd6` ใน `.send-btn:hover` / `.btn.primary:hover` — ไม่งั้นสี hover จะชนกับสีปุ่มปกติของธีม Light · ธีม Dark คงเฉดแบรนด์ `#6c63ff` เดิมไม่เปลี่ยน · gradient ปุ่ม login คง hardcode ไว้ตามเดิม (เป็น element ตกแต่งขนาดใหญ่ ตัวอักษร bold บนครึ่งเข้มของ gradient)
+
+**File:** [style.css:192-232](videocall/public/style.css#L192-L232) (`:root` — ธีม Light)
+
+**สาเหตุ:** `--primary: #6c63ff` ถูกใช้เป็น**สีตัวอักษร**หลายจุด (รหัสห้อง `.room-code-display`, ป้าย "AI", ไอคอนหัวแชท, ตัวจับเวลา session) บนพื้นสว่างของธีม Light ได้ contrast ~4.3:1 ต่ำกว่าเกณฑ์ WCAG AA 4.5:1 สำหรับตัวอักษรปกติ (ธีม Dark ไม่มีปัญหานี้เพราะพื้นมืด)
+
+**Suggested fix:** ในบล็อก `:root` (Light) เท่านั้น ลด `--primary` ให้เข้มขึ้น เช่น `#574fd6` (~5.0:1 บนพื้นขาว, ตัวอักษรขาวบนปุ่ม primary ยังผ่าน ~5.8:1) — ไม่กระทบธีม Dark เพราะ `[data-theme="dark"]` ทับกลับเป็น `#6c63ff` หรือแยกตัวแปร `--primary-text` เฉพาะกรณีใช้เป็นตัวอักษร
+
+### หมายเหตุการเปลี่ยนพฤติกรรม (behavior change — ไม่ใช่บั๊กจากธีมโดยตรง)
+
+- **`speakOnDemand()` เงียบเมื่อปิดลำโพง:** ✅ **แก้แล้ว (2026-07-27)** — กด 🔊 ขณะลำโพงปิด ตอนนี้ประกาศ "ลำโพงปิดอยู่ — เปิดลำโพงเพื่อฟังข้อความ" ผ่าน screen-reader live region (คนตาดีเห็นสถานะปุ่มลำโพงสีแดงอยู่แล้ว)
+- **`#chat-messages` ถอด `aria-live`:** ✅ **ปิดช่องโหว่แล้ว (2026-07-27)** — `speakPeerMessage()` ตอนนี้ fallback ไปประกาศ `ข้อความ: <เนื้อหา>` ผ่าน live region เมื่อเส้นทาง TTS ใช้ไม่ได้ (peer-TTS ปิด / ลำโพงปิด / ไม่มี speechSynthesis) — ผู้ใช้ตาบอดจึงรู้เสมอว่ามีข้อความตัวอักษรเข้ามา โดยไม่พูดซ้ำสองรอบ (TTS กับ live region ทำงานทีละทางเท่านั้น) และไม่กลับไปสู่ปัญหาเดิมที่ TalkBack อ่านทุกอย่างรัว ๆ (interim STT/AI log ไม่เข้าเส้นทางนี้)
+
+### บั๊ก accessibility ที่เคยเปิดค้าง — แก้แล้วทั้งหมดในรอบนี้ (2026-07-27)
+
+- 🔴 **A8/P0:** ✅ **แก้แล้ว** — `showSystemMsg()` ([app.js:1818](videocall/public/app.js#L1818)) เรียก `announceAccessibility(text)` ทุกครั้ง — error วิกฤตทั้งหมด (กล้อง/ไมค์ถูกปฏิเสธ, ICE ล้มเหลว, connect_error, Whisper/AI error, วางสาย, บันทึก Settings) ถูกประกาศต่อ screen reader แล้ว · จุดที่มีประกาศสั้นของตัวเองอยู่แล้ว (peer เข้า/ออก, เปิด auto peer-TTS ตอนเข้าโหมด) ส่ง `{ announce: false }` เพื่อไม่พูดซ้ำสองรอบ · timing log debug (`showTimingLog`) แยกฟังก์ชันอยู่แล้ว ยังเงียบตามเดิม
+- 🟡 **A9:** ✅ **แก้แล้ว** — `applyMode()` sync `aria-pressed` บน `.mode-btn` ทุกปุ่ม ([app.js:528-533](videocall/public/app.js#L528-L533)) + ค่าเริ่มต้นใน HTML (`ai=true`, `person=false` ตรงกับ class `active`)
+- 🟡 **A7:** ✅ **แก้แล้ว** — ปุ่มคัดลอกประกาศ "คัดลอกรหัสแล้ว" เมื่อสำเร็จ และเพิ่ม `.catch` ที่แสดง+ประกาศรหัสห้องเมื่อ clipboard ถูกบล็อก (เดิม fail เงียบ)
+
+### แก้เพิ่มระหว่างตรวจซ้ำ (hardening)
+
+- **`announceAccessibility()` race จากการเรียกติดกัน:** timer 30ms ที่ตั้งข้อความของการเรียกครั้งก่อนไม่เคยถูก `clearTimeout` (เก็บแค่ timer ล้าง 5 วิ) — เมื่อ A8 ทำให้มีการประกาศติดกันได้จริง (เช่น "ล็อกอินแล้ว" → welcome) จึงเก็บ timer ทั้งสองตัวใน `srSetTimers`/`srClearTimers` และยกเลิกทั้งคู่ก่อนประกาศใหม่ ([app.js:1799-1815](videocall/public/app.js#L1799-L1815))
+
+### ยืนยันแล้ว — ไม่พบบั๊กในส่วนที่แก้ (ธีม + wire-format)
+
+- **ธีมสลับได้จริง + ไม่มี flash:** inline `<head>` script ตั้ง `data-theme` ก่อน CSS โหลด, `applyTheme()` sync ตอนโหลด/Save, `/face` คงพื้นดำผ่าน `body.face-mode` ทับตัวแปรธีม
+- **`--text-primary` fallback ที่เคยกำกวมถูกแก้:** `.dpad-btn` เดิมใช้ `var(--text-primary, #e2e8f0)` (ตัวแปรไม่เคยถูกนิยาม → fallback สีอ่อนเสมอ) ตอนนี้ใช้ `var(--pad-btn-color)` ที่ theme-aware ถูกต้อง
+- **wire-format กว้างขึ้นเป็น Head 0-90 center 45 สอดคล้องกันครบ:** `WIRE_HEAD_BASE=45`/`MAX=90` (app.js), `/face` decode center 45 + mouth หาร 70, `head.urdf` joint limit ±0.7854 rad (=45°) ตรงกับ `headLimit=45` โหมด person — encode/decode ยังกันเองถูก (ต่อยอดจากการยืนยันใน [REVIEW.md §20](REVIEW.md))
+- `node --check videocall/public/app.js` → ผ่าน
+
+**สรุปรอบนี้:** ฟีเจอร์ธีมทำงานถูกต้อง พบบั๊กที่ฟีเจอร์ทำให้เกิด 1 จุด (BUG-8 — แก้แล้ว) และจุด contrast ที่ควรปรับ 1 จุด (BUG-9 — เปิดไว้ให้ผู้ใช้ตัดสินเฉดแบรนด์) · บั๊ก accessibility ที่ค้างอยู่ (A8/P0 เด่นสุด) ไม่ได้ถูกฟีเจอร์ธีมแก้หรือทำให้แย่ลง แนะนำจัดการ A8/P0 เป็นลำดับแรกเพราะกระทบ operator ตาบอดโดยตรง
+
+---
+
+## รอบแก้บั๊กตามรายการค้าง + ตรวจสอบซ้ำ (2026-07-27)
+
+แก้ทุกรายการที่เปิดค้างในรายงานนี้ (BUG-9, A8/P0, A9, A7 + หมายเหตุพฤติกรรม 2 จุด) — สถานะอัปเดตไว้ใต้แต่ละหัวข้อด้านบนแล้ว พร้อมพบและแก้ race เล็ก 1 จุดใน `announceAccessibility` ระหว่างตรวจซ้ำ
+
+### การตรวจสอบซ้ำ (verification)
+
+1. **Syntax** — `node --check videocall/public/app.js` → ผ่าน
+2. **A8** — ไล่ crosscheck จุดเรียก `showSystemMsg` ทั้ง 25 จุด: ทุกจุดเป็นเหตุการณ์ one-shot (ไม่มีจุดยิงถี่ที่จะทำให้ screen reader พูดรัว); 3 จุดที่มีประกาศสั้นคู่กันอยู่แล้วส่ง `{ announce: false }` ครบ (peer-joined, peer-left, auto peer-TTS) — ไม่มีการพูดซ้ำสองรอบเหลืออยู่
+3. **A9** — `aria-pressed` sync ใน `applyMode` ครอบคลุมทุกครั้งที่สลับโหมด รวมตอน boot (`initApp` เรียก `applyMode` เสมอ) และค่าเริ่มต้นใน HTML ตรงกับ class `active`
+4. **A7** — เส้นทาง success ประกาศผล, เส้นทาง fail (clipboard ถูกบล็อก/non-secure context) แสดง+ประกาศรหัสห้องให้พิมพ์เองได้
+5. **BUG-9** — คำนวณ contrast ยืนยัน: `#574fd6` บนขาว ~6.0:1, บน `#f1f5f9` ~5.4:1, ขาวบน `#574fd6` ~6.0:1 — ผ่าน WCAG AA ทุกจุดที่ `--primary` ถูกใช้เป็นตัวอักษร/พื้นปุ่มในธีม Light; ธีม Dark ไม่ถูกแตะ (override กลับเป็น `#6c63ff`)
+6. **speakPeerMessage fallback** — ตรวจผู้เรียกทั้ง 2 จุด (socket `chat-message`, data-channel `onmessage`): เป็นข้อความ peer เท่านั้น (robot payload ถูกกรองด้วย `applyRobotPayload` ก่อนถึงเส้นทางแชท) + guard `!clean` กัน JSON ล้วน; เส้นทาง TTS กับ live region เป็น either/or ไม่มีทางซ้อน
+7. **ผลข้างเคียงต่อ policy "minimal aria-live"** — ประกาศที่เพิ่มทั้งหมดเป็นเหตุการณ์สำคัญครั้งเดียว (error/สถานะเปลี่ยน/ผลการกดปุ่ม/ข้อความเข้า) ไม่มี stream ต่อเนื่อง; interim STT, AI typing, timing log ยังเงียบต่อ screen reader ตามเดิม
+
+**คงเหลือ (นอกขอบเขตรายงานนี้ — ติดตามใน BUGREVIEW.md/REVIEW.md):** P1 (ประกาศตำแหน่ง D-pad ทั้งที่ MQTT หลุด — false confidence), A10 (role="log", label ช่อง join/chat), #21 switch-access/prefers-reduced-motion, #22 live caption, และการทดสอบบนอุปกรณ์จริง (TalkBack บน Android) ซึ่งการตรวจแบบ static แทนไม่ได้

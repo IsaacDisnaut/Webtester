@@ -11,13 +11,17 @@ import serial
 # the public broker added 100-500 ms of jitter that made motion stutter.
 # To use the old public broker set: BROKER="test.mosquitto.org", PORT=8081,
 # USE_TLS_WEBSOCKETS=True.
-# NOTE: a duplicate Mosquitto *Windows service* also binds 127.0.0.1:1883 and
-# hijacks loopback connections — but it's a SEPARATE broker from the one the
-# web app uses (the start-local.bat instance binds 0.0.0.0). Connecting to the
-# machine's LAN IP reaches the correct (0.0.0.0) broker. Permanent fix: stop
-# the duplicate service (elevated):  net stop mosquitto  then set it to Manual.
-# Override per machine without editing code:  set MQTT_BROKER=192.168.1.99
-BROKER             = os.environ.get("MQTT_BROKER", "192.168.1.146")  # LAN IP — reaches the web app's broker, not the loopback service
+# NOTE: some machines also run a Mosquitto *Windows service* (e.g. installed
+# by `winget install EclipseFoundation.Mosquitto`) that auto-starts and binds
+# 127.0.0.1:1883 — a SEPARATE broker from the one start-local.bat launches
+# (which binds 0.0.0.0 and also serves 9001/9443, which the service's default
+# config doesn't). If that happens, "localhost" silently reaches the WRONG
+# broker (connects fine, but never receives robot/control from the web app).
+# Fix: stop the service permanently —
+#   net stop mosquitto  &&  sc config mosquitto start=disabled   (elevated)
+# Until then, override per machine without editing code:
+#   set MQTT_BROKER=192.168.1.99   (that machine's own LAN IP)
+BROKER             = os.environ.get("MQTT_BROKER", "localhost")
 PORT               = int(os.environ.get("MQTT_PORT", "1883"))        # plain-TCP listener (9001/9443 are WebSocket-only — TCP can't use them)
 USE_TLS_WEBSOCKETS = False
 SERIAL_PORT        = os.environ.get("ROBOT_SERIAL_PORT", "COM3")     # e.g. /dev/ttyUSB0 on Linux
