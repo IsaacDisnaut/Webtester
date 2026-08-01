@@ -2,15 +2,30 @@ import json
 import os
 import time
 import threading
+from urllib.parse import urlparse
 import paho.mqtt.client as mqtt
 import serial
 
 # ── Config ───────────────────────────────────────────────────
-# Default = local Mosquitto started by start-local.bat (same broker the web
-# app reaches through the /ws/mqtt proxy). Local TCP has near-zero latency —
-# the public broker added 100-500 ms of jitter that made motion stutter.
-# To use the old public broker set: BROKER="test.mosquitto.org", PORT=8081,
-# USE_TLS_WEBSOCKETS=True.
+# Two ways to point this bridge at a broker:
+#
+#   MQTT_URL — one full URL, handles every case (preferred):
+#     tcp://192.168.1.5:1883            same LAN as the operator PC (lowest latency)
+#     wss://xxxx.trycloudflare.com/ws/mqtt   different network, via the tunnel
+#     wss://test.mosquitto.org:8081/    public broker (explicit "/" = root path)
+#
+#   MQTT_BROKER + MQTT_PORT — legacy host/port pair, plain TCP only.
+#
+# The wss:// form rides the SAME Cloudflare tunnel as the web app: server.js
+# replays the WebSocket handshake verbatim to Mosquitto's 9001 listener, so a
+# paho client reaches the broker exactly like the browser does — no extra port
+# opened, no firewall rule, works from anywhere. Default path is /ws/mqtt
+# because that is what server.js proxies; give an explicit path for brokers
+# that serve MQTT at their root.
+#
+# Prefer tcp:// when both machines are on one LAN: near-zero latency, whereas
+# routing through the public tunnel adds the same 100-500 ms of jitter that
+# made motion stutter on test.mosquitto.org.
 # NOTE: some machines also run a Mosquitto *Windows service* (e.g. installed
 # by `winget install EclipseFoundation.Mosquitto`) that auto-starts and binds
 # 127.0.0.1:1883 — a SEPARATE broker from the one start-local.bat launches
@@ -24,8 +39,26 @@ import serial
 BROKER             = os.environ.get("MQTT_BROKER", "localhost")
 PORT               = int(os.environ.get("MQTT_PORT", "1883"))        # plain-TCP listener (9001/9443 are WebSocket-only — TCP can't use them)
 USE_TLS_WEBSOCKETS = False
+TRANSPORT          = "tcp"
+WS_PATH            = "/ws/mqtt"
 SERIAL_PORT        = os.environ.get("ROBOT_SERIAL_PORT", "COM3")     # e.g. /dev/ttyUSB0 on Linux
 BAUD_RATE          = 115200
+
+_url = os.environ.get("MQTT_URL", "").strip()
+if _url:
+    _p = urlparse(_url)
+    _scheme = (_p.scheme or "tcp").lower()
+    if _scheme not in ("tcp", "mqtt", "mqtts", "ssl", "ws", "wss"):
+        raise SystemExit(f"MQTT_URL: unsupported scheme '{_scheme}' (use tcp/mqtt/mqtts/ws/wss)")
+    if not _p.hostname:
+        raise SystemExit(f"MQTT_URL: no host in '{_url}' — did you forget the scheme? (e.g. wss://host/ws/mqtt)")
+    TRANSPORT          = "websockets" if _scheme in ("ws", "wss") else "tcp"
+    USE_TLS_WEBSOCKETS = _scheme in ("wss", "mqtts", "ssl")            # also gates plain-TCP TLS below
+    BROKER             = _p.hostname
+    # Default port per scheme — wss goes through 443 because that's the tunnel
+    PORT               = _p.port or {"wss": 443, "ws": 80, "mqtts": 8883, "ssl": 8883}.get(_scheme, 1883)
+    if TRANSPORT == "websockets":
+        WS_PATH = _p.path or "/ws/mqtt"
 
 # Subscribe to BOTH topics: the web app publishes live joystick/D-pad frames
 # AND AI emotion sequences to robot/emotion, but robot/control is kept as a
@@ -167,18 +200,24 @@ def on_message(_client, _userdata, msg):
 
 client = mqtt.Client(
     callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-    transport="websockets" if USE_TLS_WEBSOCKETS else "tcp",
+    transport=TRANSPORT,
 )
 
 client.on_connect = on_connect
 client.on_message = on_message
+
+# paho requests "/" by default; server.js only proxies /ws/mqtt, so without
+# this the handshake falls through to Socket.IO and the connection is refused.
+if TRANSPORT == "websockets":
+    client.ws_set_options(path=WS_PATH)
 
 if USE_TLS_WEBSOCKETS:
     client.tls_set()
 
 # Retry instead of dying if the broker isn't up yet (e.g. start-local.bat
 # still launching Mosquitto, or the robot PC boots before the operator PC).
-print(f"Connecting to {BROKER}:{PORT} …")
+_where = f"{BROKER}:{PORT}{WS_PATH if TRANSPORT == 'websockets' else ''}"
+print(f"Connecting to {_where} ({TRANSPORT}{', TLS' if USE_TLS_WEBSOCKETS else ''}) …")
 while True:
     try:
         client.connect(BROKER, PORT, 60)
