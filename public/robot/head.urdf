@@ -35,7 +35,7 @@
 
   <!-- ── Head rotation (left / right) ── -->
   <joint name="i01.head.rothead_link_joint" type="revolute">
-    <limit lower="-0.52360" upper="0.52360" effort="0" velocity="0.78540"/>
+    <limit lower="-0.78540" upper="0.78540" effort="0" velocity="0.78540"/>
     <origin rpy="0 0 1.57080" xyz="0.00246 0.01503 0.24911"/>
     <parent link="neck_link"/>
     <child link="i01.head.rothead_link"/>

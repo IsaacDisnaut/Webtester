@@ -117,6 +117,7 @@ function initLoginScreen() {
     errorEl.textContent = '';
     input.classList.remove('error');
     if (!name) {
+      // #login-error is role="alert" — the screen reader announces it itself.
       errorEl.textContent = 'กรุณากรอกชื่อของคุณ';
       input.classList.add('error');
       input.focus();
@@ -129,6 +130,7 @@ function initLoginScreen() {
 
     try {
       await doLogin(name);
+      announceAccessibility('ล็อกอินแล้ว');
       // Animate out login screen
       screen.classList.add('exit');
       screen.addEventListener('transitionend', () => {
@@ -137,6 +139,7 @@ function initLoginScreen() {
         initApp();
       }, { once: true });
     } catch (err) {
+      // role="alert" on the error span — announced by the screen reader.
       errorEl.textContent = err.message || 'เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่';
       btn.disabled = false;
       btnText.textContent = 'เริ่มใช้งาน';
@@ -154,6 +157,7 @@ const state = {
   mode: 'ai',
   micOn: true,
   camOn: true,
+  speakerOn: true,   // master audio-out switch: remote call audio + all TTS
   speechOn: false,
   localStream: null,
   aiTyping: false,
@@ -171,6 +175,7 @@ let currentRoomId = null;
 //  SETTINGS
 // ════════════════════════════════════════════════
 const DEFAULT_SETTINGS = {
+  theme: 'light',          // 'light' (default) | 'dark' — applied via data-theme on <html>
   showAiMode: false,      // "Talk with AI" nav tab is hidden by default; enable from Settings
   showDetectButton: false, // YOLO "ตรวจจับ" toggle is a debug feature, hidden by default; enable from Settings
   showTimingLog: false,    // per-message STT/AI timing breakdown is a debug feature, hidden by default
@@ -180,13 +185,19 @@ const DEFAULT_SETTINGS = {
   baseUrl: 'https://api.groq.com/openai/v1',
   apiKey: '',
   model: 'llama-3.3-70b-versatile',
-  systemPrompt: 'You are a male Thai robot. You mainly speak Thai as your native language. You can move your face left-right, move both eyes, and open/close your mouth. In EVERY response include emotion JSON blocks to animate your face, placed anywhere in your message, using EXACTLY this format: {"Head":40,"Mouth":30,"Analog":{"x":0,"y":0}}\nRanges: Head 0-80 (0=look left, 40=center, 80=look right), Mouth 30-100 (30=closed, 100=open/smile), Analog x -1 to 1 (eye pan), y -1 to 1 (eye tilt). Include as many frames as needed to make the animation feel natural (e.g. approach → peak → settle).',
+  systemPrompt: 'You are a male Thai robot. You mainly speak Thai as your native language. You can move your face left-right, move both eyes, and open/close your mouth. In EVERY response include emotion JSON blocks to animate your face, placed anywhere in your message, using EXACTLY this format: {"Head":45,"Mouth":30,"Analog":{"x":0,"y":0}}\nRanges: Head 0-90 (0=look left, 45=center, 90=look right), Mouth 30-100 (30=closed, 100=open/smile), Analog x -1 to 1 (eye pan), y -1 to 1 (eye tilt). Include as many frames as needed to make the animation feel natural (e.g. approach → peak → settle).',
   sttMode: 'browser',
   ttsEnabled: true,
   ttsRate: 1.0,
   turnUrl: '',
   turnUser: '',
   turnPass: '',
+  // Local Mosquitto through the server's /ws/mqtt proxy (server.js → 127.0.0.1:9001).
+  // Same origin as the page, so it works on http://localhost AND behind the
+  // Cloudflare tunnel without a second hostname — and ws/wss follows the page
+  // protocol, since an https page cannot open a plain ws:// socket.
+  // A public broker (test.mosquitto.org) added 100-500 ms of jitter that made
+  // motion stutter; local TCP is near-zero latency.
   mqttUrl: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/mqtt`,
   mqttTopic: 'robot/control',
 };
@@ -196,17 +207,26 @@ function loadSettings() {
     const s = localStorage.getItem('vc_settings');
     const saved = s ? JSON.parse(s) : {};
     // Migrate: prompts saved before the wire-format canonicalization still
-    // instruct the old Head 20-100 / center-45 ranges — swap in the new default.
-    if (saved.systemPrompt && /Head 20-100|"Head":45/.test(saved.systemPrompt)) delete saved.systemPrompt;
+    // instruct old Head ranges (20-100, 0-80, 0-180) — swap in the new
+    // 0-90/center-45 default. Matched on the range text, not "Head":<n>,
+    // because "Head":45 is also the NEW default's example frame.
+    if (saved.systemPrompt && /Head 20-100|Head 0-80|Head 0-180/.test(saved.systemPrompt)) delete saved.systemPrompt;
     return {
       ...DEFAULT_SETTINGS,
       ...saved,   // systemPrompt persists — the Settings form lets the user edit it
-      mqttUrl: DEFAULT_SETTINGS.mqttUrl,   // always derive from current URL, never persist
+      mqttUrl: DEFAULT_SETTINGS.mqttUrl,   // never persist: always derive from the current origin (the Cloudflare URL changes every run)
     };
   } catch { return { ...DEFAULT_SETTINGS }; }
 }
 function persistSettings(s) { localStorage.setItem('vc_settings', JSON.stringify(s)); }
 let settings = loadSettings();
+
+// The inline <head> script already set data-theme before first paint;
+// this keeps it in sync whenever settings are loaded or saved.
+function applyTheme() {
+  document.documentElement.dataset.theme = settings.theme === 'dark' ? 'dark' : 'light';
+}
+applyTheme();
 
 // API keys from server's apikey file (groq/openrouter) — used to auto-fill Settings key field
 let SERVER_KEYS = {};
@@ -232,6 +252,7 @@ const chatMessages     = $('chat-messages');
 const chatInput        = $('chat-input');
 const sendBtn          = $('send-btn');
 const micBtn           = $('mic-btn');
+const speakerBtn       = $('speaker-btn');
 const videoBtn         = $('video-btn');
 const speechBtn        = $('speech-btn');
 const endBtn           = $('end-btn');
@@ -437,9 +458,22 @@ function toggleMic() {
   state.micOn = !state.micOn;
   state.localStream.getAudioTracks().forEach(t => (t.enabled = state.micOn));
   micBtn.classList.toggle('off', !state.micOn);
-  micBtn.title = state.micOn ? 'Mute microphone' : 'Unmute microphone';
-  micBtn.setAttribute('aria-pressed', String(!state.micOn));
-  announceAccessibility(state.micOn ? 'เปิดไมโครโฟนแล้ว' : 'ปิดไมโครโฟนแล้ว');
+  micBtn.title = state.micOn ? 'ปิดไมค์' : 'เปิดไมค์';
+  // aria-pressed convention (all toggle buttons): pressed=true = feature ON.
+  // No announcement needed — the screen reader speaks the state change itself.
+  micBtn.setAttribute('aria-pressed', String(state.micOn));
+}
+
+// Speaker mute — separate from the mic: silences everything the page plays
+// (remote call audio + every TTS path). Screen-reader speech is unaffected,
+// so the aria-pressed change is always audible to a blind user.
+function toggleSpeaker() {
+  state.speakerOn = !state.speakerOn;
+  remoteVideo.muted = !state.speakerOn;
+  if (!state.speakerOn) stopSpeaking();
+  speakerBtn.classList.toggle('off', !state.speakerOn);
+  speakerBtn.title = state.speakerOn ? 'ปิดลำโพง' : 'เปิดลำโพง';
+  speakerBtn.setAttribute('aria-pressed', String(state.speakerOn));
 }
 
 function toggleCam() {
@@ -449,8 +483,8 @@ function toggleCam() {
   localVideo.classList.toggle('hidden', !state.camOn);
   camPlaceholder.classList.toggle('visible', !state.camOn);
   videoBtn.classList.toggle('off', !state.camOn);
-  videoBtn.title = state.camOn ? 'Disable camera' : 'Enable camera';
-  videoBtn.setAttribute('aria-pressed', String(!state.camOn));
+  videoBtn.title = state.camOn ? 'ปิดกล้อง' : 'เปิดกล้อง';
+  videoBtn.setAttribute('aria-pressed', String(state.camOn));
 }
 
 // ════════════════════════════════════════════════
@@ -472,6 +506,9 @@ function applyAiModeVisibility() {
 function applyRemoteRotation() {
   const deg = parseInt(settings.remoteRotation, 10) || 0;
   const sideways = deg === 90 || deg === 270;
+  // Rotated video must never be cropped (cover would cut the edges that end up
+  // at the top/bottom of the screen) — letterbox with contain instead.
+  remoteVideo.style.objectFit = deg ? 'contain' : '';
   if (!sideways) {
     remoteVideo.style.width  = '';
     remoteVideo.style.height = '';
@@ -497,9 +534,12 @@ function applyDetectButtonVisibility() {
 
 function applyMode(mode) {
   state.mode = mode;
-  document.querySelectorAll('.mode-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.mode === mode)
-  );
+  document.querySelectorAll('.mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+    // Screen readers can't see the .active highlight — mirror it (same
+    // pressed=ON convention as the control-bar toggles).
+    b.setAttribute('aria-pressed', String(b.dataset.mode === mode));
+  });
 
   const robotPanel = $('robot-panel');
   const remoteWrap = $('remote-wrap');
@@ -557,9 +597,11 @@ function applyMode(mode) {
       myTTSEnabled = true;
       updatePeerTTSStatus();
       if (currentRoomId && socket) socket.emit('peer-tts', { roomId: currentRoomId, enabled: true });
-      showSystemMsg('เปิดเสียงข้อความให้คู่สนทนาอัตโนมัติแล้ว — กดปุ่ม 🔊 ในหัวแชทเพื่อปิด');
+      // announce:false — the mode announcement below covers this moment; the
+      // 🔊-button detail is visual guidance, not something to read aloud.
+      showSystemMsg('เปิดเสียงข้อความให้คู่สนทนาอัตโนมัติแล้ว — กดปุ่ม 🔊 ในหัวแชทเพื่อปิด', { announce: false });
     }
-    announceAccessibility('โหมดคุยกับคน พร้อมแล้ว — กดปุ่ม Speech เพื่อเริ่มพูด');
+    announceAccessibility('โหมดคุยกับคน พร้อมแล้ว');
   }
 
   applyRemoteRotation(); // wrap size depends on which panels are visible
@@ -589,7 +631,7 @@ const dpadKeyHandlers   = {}; // dir -> { press, release } — shared by buttons
 function updateRobotModel() {
   const rv = window.robotViewer;
   if (!rv) return;
-  // D-pad left/right → head rotation (degrees → radians, limit ±0.524)
+  // D-pad left/right → head rotation (degrees → radians, URDF limits to ±0.785)
   rv.setJoint('i01.head.rothead_link_joint', robotState.headAngle * Math.PI / 180);
   // D-pad up/down → jaw open (0..1 → 0..0.175 rad ≈ 10°)
   rv.setJoint('i01.head.jaw_link_joint', robotState.mouthOpen * 0.17453);
@@ -608,8 +650,8 @@ var updateFaceAnimation = updateRobotModel;
 // channel) and BOTH sides of the call — decode must never depend on the
 // receiver's UI mode, because the sender may be in a different mode (operator
 // in Person mode → /face kiosk in robot mode). Matches the physical servos:
-// head 0-80 (center 40), jaw 30-100 (30 = closed).
-const WIRE_HEAD_BASE = 40, WIRE_HEAD_MIN = 0,  WIRE_HEAD_MAX = 80;
+// head 0-90 (center 45), jaw 30-100 (30 = closed).
+const WIRE_HEAD_BASE = 45, WIRE_HEAD_MIN = 0,  WIRE_HEAD_MAX = 90;
 const WIRE_MOUTH_MIN = 30, WIRE_MOUTH_MAX = 100;
 const clampNum = (v, min, max) => Math.min(max, Math.max(min, v));
 
@@ -648,6 +690,22 @@ function playEmotionSequence(str) {
 }
 
 // ── MQTT ─────────────────────────────────────────
+// A blind operator can't see the status dot — without a voice cue the D-pad
+// keeps announcing head positions with false confidence while the broker is
+// down. Announce transitions only (never each 5 s reconnect retry): connected,
+// lost-after-connected, and the very first failure.
+let mqttSpokenState = null; // null = never connected yet, then 'on' | 'off'
+function announceMqttChange(connected) {
+  if (connected) {
+    if (mqttSpokenState !== 'on') announceAccessibility('ต่อหุ่นแล้ว');
+    mqttSpokenState = 'on';
+  } else {
+    if (mqttSpokenState === 'on') announceAccessibility('หุ่นหลุด');
+    else if (mqttSpokenState === null) announceAccessibility('ต่อหุ่นไม่ได้');
+    mqttSpokenState = 'off';
+  }
+}
+
 function connectMQTT() {
   const url   = settings.mqttUrl || '';
   const topic = settings.mqttTopic || 'robot/control';
@@ -673,8 +731,10 @@ function connectMQTT() {
       clean: true,
     });
     mqttClient.on('connect', () => {
-      txt.textContent = url.replace('ws://', '').replace('wss://', '').split('/')[0];
+      // Generic label only — never show the broker host/URL on the operator UI
+      txt.textContent = 'เชื่อมต่อแล้ว';
       dot.className = 'mqtt-dot connected';
+      announceMqttChange(true);
       mqttClient.subscribe(topic);          // robot/control — joystick / d-pad
       mqttClient.subscribe('robot/emotion'); // AI emotion sequences
     });
@@ -686,20 +746,24 @@ function connectMQTT() {
       // operator side ignores its own broker loopback. AI emotion
       // sequences (JSON arrays) still play from MQTT as before.
       const isSequence = str.trim().startsWith('[');
+      if (!isSequence && isRecentSelfPub(str)) return; // our own broker loopback
       const hasOpenDC = Object.values(peers).some(p => p.dc && p.dc.readyState === 'open');
       if (!isSequence && hasOpenDC) return;
       if (isSequence) playEmotionSequence(str);
       else applyRobotPayload(str);
     });
     mqttClient.on('error', (e) => {
-      txt.textContent = e.message || 'ข้อผิดพลาด';
+      console.warn('MQTT error:', e.message); // details in console only — no host/URL on screen
+      txt.textContent = 'เชื่อมต่อไม่สำเร็จ';
       dot.className = 'mqtt-dot error';
+      announceMqttChange(false);
     });
     mqttClient.on('close', () => {
       if (txt.textContent !== 'กำลังเชื่อมต่อ…') {
         txt.textContent = 'ตัดการเชื่อมต่อแล้ว';
         dot.className = 'mqtt-dot';
       }
+      announceMqttChange(false);
     });
   } catch (e) {
     txt.textContent = 'Failed: ' + e.message;
@@ -723,11 +787,30 @@ let mqttPendingMsg = null;
 // deep.py subscribes to both.
 function liveControlTopic() { return settings.mqttTopic || 'robot/control'; }
 
+// We subscribe to the same topic we publish live control on, so the broker
+// echoes our own frames back ~66-1000 ms stale. When no data channel is open
+// (the DC check in the message handler doesn't apply) that echo used to fight
+// the fresh local state mid-drag — remember what we sent recently and drop
+// byte-identical loopbacks. Only this client publishes single control frames,
+// so an exact match within the window is always our own echo.
+const SELF_ECHO_WINDOW_MS = 1000;
+let recentSelfPubs = [];
+function rememberSelfPub(msg) {
+  const now = Date.now();
+  recentSelfPubs = recentSelfPubs.filter(p => now - p.at < SELF_ECHO_WINDOW_MS);
+  recentSelfPubs.push({ msg, at: now });
+}
+function isRecentSelfPub(str) {
+  const now = Date.now();
+  return recentSelfPubs.some(p => p.msg === str && now - p.at < SELF_ECHO_WINDOW_MS);
+}
+
 function publishRobotStateMQTT(msg) {
   if (!mqttClient || !mqttClient.connected) return;
   const now = Date.now();
   if (!mqttPubTimer && now - mqttLastPubAt >= MQTT_PUBLISH_GAP_MS) {
     mqttLastPubAt = now;
+    rememberSelfPub(msg);
     mqttClient.publish(liveControlTopic(), msg);
     return;
   }
@@ -737,6 +820,7 @@ function publishRobotStateMQTT(msg) {
       mqttPubTimer = null;
       if (mqttClient && mqttClient.connected && mqttPendingMsg) {
         mqttLastPubAt = Date.now();
+        rememberSelfPub(mqttPendingMsg);
         mqttClient.publish(liveControlTopic(), mqttPendingMsg);
         mqttPendingMsg = null;
       }
@@ -745,7 +829,7 @@ function publishRobotStateMQTT(msg) {
 }
 
 function publishRobotState() {
-  // Canonical wire encoding (head 0-80 center 40, mouth 30-100) — same base
+  // Canonical wire encoding (head 0-90 center 45, mouth 30-100) — same base
   // in every mode so the receiving side can always decode with WIRE_* consts.
   const headDeg  = clampNum(Math.round(WIRE_HEAD_BASE + robotState.headAngle), WIRE_HEAD_MIN, WIRE_HEAD_MAX);
   const mouthDeg = clampNum(Math.round(WIRE_MOUTH_MIN + robotState.mouthOpen * (WIRE_MOUTH_MAX - WIRE_MOUTH_MIN)), WIRE_MOUTH_MIN, WIRE_MOUTH_MAX);
@@ -765,7 +849,30 @@ function publishRobotState() {
 
 // ── Joystick ─────────────────────────────────────
 // Shared by pointer drag and keyboard (WASD) — x/y each in -1..1
+// ── Analog haptics ────────────────────────────────
+// A blind operator can't see the thumb follow their finger, and eye-position
+// speech is deliberately off. Vibration fills that gap without a single
+// spoken word (Android only; silently no-ops elsewhere):
+//   · short tick  — the value crossed a 25% step (finger IS being tracked)
+//   · long buzz   — clamped at the rim (can't go further this way)
+//   · double tick — back at dead centre (released / reset)
+const HAPTIC_STEP = 0.25;
+let hapticStepX = 0, hapticStepY = 0, hapticAtEdge = false, hapticAtCenter = true;
+function joystickHaptics(x, y) {
+  if (!navigator.vibrate) return;
+  const atCenter = x === 0 && y === 0;
+  const atEdge   = Math.hypot(x, y) >= 0.999;
+  const sx = Math.round(x / HAPTIC_STEP);
+  const sy = Math.round(y / HAPTIC_STEP);
+  if (atCenter && !hapticAtCenter)                 navigator.vibrate([15, 60, 15]);
+  else if (atEdge && !hapticAtEdge)                navigator.vibrate(40);
+  else if (sx !== hapticStepX || sy !== hapticStepY) navigator.vibrate(10);
+  hapticStepX = sx; hapticStepY = sy;
+  hapticAtEdge = atEdge; hapticAtCenter = atCenter;
+}
+
 function setJoystick(x, y) {
+  joystickHaptics(x, y);
   robotState.analogX = x;
   robotState.analogY = y;
   const base  = $('joystick-base');
@@ -775,6 +882,10 @@ function setJoystick(x, y) {
     thumb.style.transform = `translate(${x * maxR}px,${-y * maxR}px)`;
     thumb.classList.toggle('active', x !== 0 || y !== 0);
   }
+  // Drive the local 3D preview directly at input rate — same as the D-pad
+  // path. Never rely on the broker echoing our own frame back: that echo is
+  // throttled/stale (= stutter) and is now dropped as self-loopback anyway.
+  updateRobotModel();
   publishRobotState();
 }
 
@@ -785,13 +896,34 @@ function resetJoystick() {
 function initJoystick() {
   const base = $('joystick-base');
   let active = false;
+  let moved  = false;          // gesture crossed the drag threshold at least once
+  let startX = 0, startY = 0;
+
+  // TalkBack's double-tap activation replays a synthetic press/release at the
+  // CENTRE of the focused slider half — far from the base centre. Treating
+  // that as a drag yanked the eyes sideways and snapped them back (a visible
+  // twitch, published to the robot). So a press only becomes a drag after
+  // real finger/mouse movement, and a no-move tap neither moves nor resets.
+  const DRAG_START_PX = 8;
 
   function getCenter() {
     const r = base.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, maxR: r.width * 0.35 };
   }
 
+  function start(clientX, clientY) {
+    active = true;
+    moved  = false;
+    startX = clientX;
+    startY = clientY;
+  }
+
   function move(clientX, clientY) {
+    if (!moved) {
+      if (Math.hypot(clientX - startX, clientY - startY) < DRAG_START_PX) return;
+      moved = true;
+      announceAnalogEngaged(); // first analog change of this gesture
+    }
     const c  = getCenter();
     let dx   = clientX - c.x;
     let dy   = clientY - c.y;
@@ -803,15 +935,105 @@ function initJoystick() {
   function release() {
     if (!active) return;
     active = false;
-    resetJoystick();
+    if (moved) resetJoystick(); // a tap that never dragged must not twitch the eyes
   }
 
-  base.addEventListener('mousedown',  (e) => { active = true; move(e.clientX, e.clientY); });
-  base.addEventListener('touchstart', (e) => { e.preventDefault(); active = true; move(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
+  base.addEventListener('mousedown', (e) => {
+    e.preventDefault(); // keep mouse clicks from focusing the eye stick
+    armAnalogAnnouncement();
+    start(e.clientX, e.clientY);
+  });
+  base.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    armAnalogAnnouncement();
+    start(e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: false });
   document.addEventListener('mousemove',  (e) => { if (active) move(e.clientX, e.clientY); });
   document.addEventListener('touchmove',  (e) => { if (active) { e.preventDefault(); move(e.touches[0].clientX, e.touches[0].clientY); } }, { passive: false });
   document.addEventListener('mouseup',   release);
   document.addEventListener('touchend',  release);
+  // Android fires touchcancel (not touchend) when the system/TalkBack takes
+  // the gesture back mid-drag. Without this the joystick stayed "active" with
+  // the eyes frozen at the last position until the next gesture.
+  document.addEventListener('touchcancel', release);
+}
+
+// ── Screen-reader eye controls ───────────────────
+// Primary TalkBack path: single tap focuses the joystick overlay, then
+// double-tap-AND-HOLD passes the real drag through. These sr-only buttons are
+// the no-drag fallback — each steps the eyes EYE_TAP_STEP per activation,
+// silently (the user asked for no eye-position speech). Unlike a drag
+// release, a stepped position persists until reset (⦿ / eye-center / Space).
+const EYE_TAP_STEP = 0.25;
+
+// "ควบคุมได้แล้ว" — announced once per drag gesture, at the moment the analog
+// first moves. Not repeated while the finger stays down; a new gesture arms it
+// again. No focus checks: TalkBack's double-tap-and-hold drags whatever is
+// under the FINGER regardless of where focus sits, so gating on the eye stick
+// holding screen-reader focus made the announcement fire only sometimes (the
+// reported bug). Those checks existed to stop the app's own speechSynthesis
+// from talking to sighted users — obsolete now that announcements are
+// aria-live writes, which are silent unless a screen reader is running.
+// Assertive because it lands mid-gesture, when a polite message may be
+// delayed past the region's auto-clear and dropped.
+let analogGestureAnnounced = true; // armed by each gesture start
+function armAnalogAnnouncement() {
+  analogGestureAnnounced = false;
+}
+function announceAnalogEngaged() {
+  if (analogGestureAnnounced) return;
+  analogGestureAnnounced = true;
+  announceAccessibility('ควบคุมได้แล้ว', true);
+}
+
+// ONE slider covers the whole circle (the old left/right halves forced a
+// blind user to aim at an invisible half — merged 2026-07-14). TalkBack's
+// swipe-up/down (or volume keys) arrives as ArrowUp/ArrowDown keydown →
+// eyes up/down one step. ArrowLeft/Right step the X axis (desktop keyboard
+// while focused; TalkBack left/right stepping uses the sr-only ตาซ้าย/ตาขวา
+// buttons instead). Home recentres both axes. Handled and stopped here so
+// the global Arrow-key → D-pad and WASD handlers never see these events.
+// The aria values stay static on purpose — the adjustments are silent,
+// haptics signal movement instead.
+function initEyeStick() {
+  const el = $('eye-stick');
+  if (!el) return;
+  el.addEventListener('keydown', (e) => {
+    let x = robotState.analogX;
+    let y = robotState.analogY;
+    if      (e.key === 'ArrowUp')    y = clampNum(+(y + EYE_TAP_STEP).toFixed(2), -1, 1);
+    else if (e.key === 'ArrowDown')  y = clampNum(+(y - EYE_TAP_STEP).toFixed(2), -1, 1);
+    else if (e.key === 'ArrowRight') x = clampNum(+(x + EYE_TAP_STEP).toFixed(2), -1, 1);
+    else if (e.key === 'ArrowLeft')  x = clampNum(+(x - EYE_TAP_STEP).toFixed(2), -1, 1);
+    else if (e.key === 'Home') { x = 0; y = 0; }
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+    setJoystick(x, y);
+  });
+}
+
+function initEyeA11yButtons() {
+  const steps = {
+    'eye-left':  [-EYE_TAP_STEP, 0],
+    'eye-right': [ EYE_TAP_STEP, 0],
+    'eye-up':    [0,  EYE_TAP_STEP],
+    'eye-down':  [0, -EYE_TAP_STEP],
+  };
+  Object.entries(steps).forEach(([id, [dx, dy]]) => {
+    const btn = $(id);
+    if (!btn) return;
+    // Silent by design — TalkBack already reads the button label; the user
+    // asked for no spoken eye-position feedback.
+    btn.addEventListener('click', () => {
+      const x = clampNum(+(robotState.analogX + dx).toFixed(2), -1, 1);
+      const y = clampNum(+(robotState.analogY + dy).toFixed(2), -1, 1);
+      setJoystick(x, y);
+    });
+  });
+  const center = $('eye-center');
+  if (center) center.addEventListener('click', resetJoystick);
+  initEyeStick();
 }
 
 // ── D-pad ─────────────────────────────────────────
@@ -821,14 +1043,42 @@ const activeDpadDirs = new Set();
 
 function applyDPad() {
   const speed = parseFloat(settings.dpadSpeed) || 1;
-  // Person mode drives the real robot: head servo range 0-80 (center 40) →
-  // headAngle ±40. Other modes keep the original ±35 cap.
-  const headLimit = state.mode === 'person' ? 40 : 35;
+  // Person mode drives the real robot: head servo range 0-90 (center 45) →
+  // headAngle ±45. Other modes keep the original ±35 cap.
+  const headLimit = state.mode === 'person' ? 45 : 35;
   if (activeDpadDirs.has('left'))  robotState.headAngle += 3 * speed;
   if (activeDpadDirs.has('right')) robotState.headAngle -= 3 * speed;
   robotState.headAngle = Math.max(-headLimit, Math.min(headLimit, robotState.headAngle));
   if (activeDpadDirs.has('up'))    robotState.mouthOpen = Math.max(robotState.mouthOpen - 0.10 * speed,  0);
   if (activeDpadDirs.has('down'))  robotState.mouthOpen = Math.min(robotState.mouthOpen + 0.10 * speed,  1);
+}
+
+// A screen-reader "double-tap" arrives as an instant press+release — with the
+// hold-to-repeat design that moved only one 3°/0.10 tick per activation. Short
+// taps are boosted to DPAD_TAP_TICKS ticks so each tap is one useful step, and
+// the new position is spoken for blind users.
+const DPAD_TAP_TICKS = 4;    // 12° head / 0.40 mouth per tap at normal speed
+const DPAD_TAP_MS    = 300;  // press shorter than this counts as a tap
+
+function applyDPadTap(dir, ticks) {
+  const speed = parseFloat(settings.dpadSpeed) || 1;
+  const headLimit = state.mode === 'person' ? 45 : 35;
+  if (dir === 'left')  robotState.headAngle += 3 * speed * ticks;
+  if (dir === 'right') robotState.headAngle -= 3 * speed * ticks;
+  robotState.headAngle = Math.max(-headLimit, Math.min(headLimit, robotState.headAngle));
+  if (dir === 'up')    robotState.mouthOpen = Math.max(robotState.mouthOpen - 0.10 * speed * ticks, 0);
+  if (dir === 'down')  robotState.mouthOpen = Math.min(robotState.mouthOpen + 0.10 * speed * ticks, 1);
+  updateRobotModel();
+}
+
+function announceDPadState(dir) {
+  if (dir === 'left' || dir === 'right') {
+    const a = Math.round(robotState.headAngle);
+    announceAccessibility(a === 0 ? 'หัวตรง' : `หัว${a > 0 ? 'ซ้าย' : 'ขวา'} ${Math.abs(a)}`);
+  } else {
+    const m = Math.round(robotState.mouthOpen * 100);
+    announceAccessibility(m === 0 ? 'ปากปิด' : `ปาก ${m}`);
+  }
 }
 
 // Center button / Space key — reset head, mouth and eyes to neutral
@@ -838,9 +1088,9 @@ function resetDPad() {
   document.querySelectorAll('.dpad-btn.pressed').forEach((b) => b.classList.remove('pressed'));
   robotState.headAngle = 0;
   robotState.mouthOpen = 0;
-  robotState.analogX   = 0;
-  robotState.analogY   = 0;
-  publishRobotState();
+  // Route the analog reset through setJoystick so the thumb visual and the
+  // a11y sliders reset too; it also publishes the fully-zeroed state.
+  setJoystick(0, 0);
 }
 
 function initDPad() {
@@ -848,14 +1098,23 @@ function initDPad() {
   if (centerBtn) {
     centerBtn.addEventListener('mousedown',  resetDPad);
     centerBtn.addEventListener('touchstart', (e) => { e.preventDefault(); resetDPad(); }, { passive: false });
+    // Screen readers activate via click (touchstart may never fire) — resetDPad
+    // is idempotent, so a duplicate call after mousedown is harmless.
+    centerBtn.addEventListener('click', () => {
+      resetDPad();
+      announceAccessibility('รีเซ็ตแล้ว');
+    });
   }
 
   ['up', 'down', 'left', 'right'].forEach((dir) => {
     const btn = $(`dpad-${dir}`);
+    let pressAt = 0;       // when the current hold started
+    let lastHandledAt = 0; // guards the click fallback against double-firing
 
     function press() {
       if (activeDpadDirs.has(dir)) return; // already held — ignore repeat presses
       activeDpadDirs.add(dir);
+      pressAt = Date.now();
       btn.classList.add('pressed');
       applyDPad();
       publishRobotState();
@@ -864,13 +1123,22 @@ function initDPad() {
       }
     }
 
-    function release() {
+    function release(skipTapBoost) {
       if (!activeDpadDirs.has(dir)) return;
       activeDpadDirs.delete(dir);
       btn.classList.remove('pressed');
       if (activeDpadDirs.size === 0 && dpadInterval) {
         clearInterval(dpadInterval);
         dpadInterval = null;
+      }
+      // Short tap (incl. TalkBack double-tap = instant press+release): the hold
+      // loop only ran once, so top it up to a full step and speak the result.
+      // Keyboard passes skipTapBoost — arrow-key taps keep the original 1-tick
+      // feel and stay silent so speech feedback never interrupts ongoing TTS.
+      lastHandledAt = Date.now();
+      if (!skipTapBoost && lastHandledAt - pressAt < DPAD_TAP_MS) {
+        applyDPadTap(dir, DPAD_TAP_TICKS - 1); // press already applied 1 tick
+        announceDPadState(dir);
       }
       publishRobotState();
     }
@@ -879,9 +1147,19 @@ function initDPad() {
 
     btn.addEventListener('mousedown',   press);
     btn.addEventListener('touchstart',  (e) => { e.preventDefault(); press(); }, { passive: false });
-    btn.addEventListener('mouseup',     release);
-    btn.addEventListener('touchend',    release);
-    btn.addEventListener('mouseleave',  release);
+    // Wrapped so the event object is never mistaken for the skipTapBoost flag
+    btn.addEventListener('mouseup',     () => release());
+    btn.addEventListener('touchend',    () => release());
+    btn.addEventListener('mouseleave',  () => release());
+    // Some assistive tech sends only a click with no touch/mouse events at all.
+    // Skip it when press/release just handled this activation.
+    btn.addEventListener('click', () => {
+      if (Date.now() - lastHandledAt < 500) return;
+      lastHandledAt = Date.now();
+      applyDPadTap(dir, DPAD_TAP_TICKS);
+      announceDPadState(dir);
+      publishRobotState();
+    });
   });
 }
 
@@ -890,6 +1168,7 @@ function initRobotPanel() {
   if (!robotPanelReady) {
     robotPanelReady = true;
     initJoystick();
+    initEyeA11yButtons();
     initDPad();
 
     const canvas  = document.getElementById('robot-canvas');
@@ -983,7 +1262,7 @@ function initKeyboardControls() {
 
   window.addEventListener('keyup', (e) => {
     const dir = ARROW_DIR[e.key];
-    if (dir) { dpadKeyHandlers[dir]?.release(); return; }
+    if (dir) { dpadKeyHandlers[dir]?.release(true); return; }
 
     const eyeDir = EYE_KEY_DIR[e.code];
     if (eyeDir && pressedEyeKeys.has(eyeDir)) {
@@ -994,7 +1273,7 @@ function initKeyboardControls() {
 
   // Release any keyboard-held controls if the window loses focus mid-press
   window.addEventListener('blur', () => {
-    Object.keys(dpadKeyHandlers).forEach(dir => dpadKeyHandlers[dir]?.release());
+    Object.keys(dpadKeyHandlers).forEach(dir => dpadKeyHandlers[dir]?.release(true));
     if (pressedEyeKeys.size) { pressedEyeKeys.clear(); updateEyesFromKeys(); }
   });
 }
@@ -1002,16 +1281,44 @@ function initKeyboardControls() {
 // ════════════════════════════════════════════════
 //  SPEECH RECOGNITION
 // ════════════════════════════════════════════════
+// Whisper STT is browser-independent: MediaRecorder + a server round-trip to
+// Groq. It covers every browser the Web Speech API does not — Firefox on any
+// OS, iOS Safari, and the Chromium build Ubuntu ships — provided the server
+// has a Groq key, which /api/provider-defaults reports in SERVER_KEYS.
+function whisperAvailable() {
+  return typeof MediaRecorder !== 'undefined' && !!SERVER_KEYS.groq;
+}
+
+// Runtime-only switch to Whisper — never persisted, so the user's configured
+// mode stays intact on browsers where Web Speech does work. Keeps STT running
+// if it was already on, so a mid-session failure is recovered from rather than
+// merely reported. Returns false when Whisper cannot cover for it either.
+function fallbackToWhisper(reason, msgDelay = 0) {
+  if (!whisperAvailable()) return false;   // checked first: "already whisper"
+  if (settings.sttMode === 'whisper') return true;  // is no use if it can't run
+  const wasOn = state.speechOn;
+  if (wasOn) disableSpeech();
+  settings.sttMode = 'whisper';
+  // msgDelay lets the boot-time call land after the welcome message
+  if (msgDelay) setTimeout(() => showSystemMsg(reason), msgDelay);
+  else showSystemMsg(reason);
+  if (wasOn) toggleSpeech();               // re-arm in Whisper mode
+  return true;
+}
+
 function initSpeechRecognition() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
+    // No Web Speech API at all (Firefox on any OS, iOS Safari). Whisper takes
+    // over silently — critically, this runs BEFORE initApp's /face autostart,
+    // so the kiosk's toggleSpeech() lands in Whisper mode instead of hitting
+    // enableSpeech()'s `if (!recognition) return` and transcribing nothing.
+    if (fallbackToWhisper('เบราว์เซอร์นี้ไม่รองรับการรู้จำเสียงในตัว — สลับไปใช้ Whisper ให้อัตโนมัติแล้ว', 1200)) return;
     speechBtn.style.display = 'none';
-    if (IS_IOS) {
-      // Delay so it appears after the welcome message
-      setTimeout(() => showSystemMsg(
-        'iOS Safari ไม่รองรับการรู้จำเสียงพูด กรุณาพิมพ์ข้อความแทน'
-      ), 1200);
-    }
+    // Delay so it appears after the welcome message
+    setTimeout(() => showSystemMsg(
+      'เบราว์เซอร์นี้ไม่รองรับการรู้จำเสียงพูด และ Whisper ก็ใช้ไม่ได้ (ไม่ได้ตั้งค่า Groq key) กรุณาพิมพ์ข้อความแทน'
+    ), 1200);
     return;
   }
 
@@ -1024,9 +1331,13 @@ function initSpeechRecognition() {
   // Exponential backoff for restarts: backs off after each session-end with no
   // result, resets to base on success. Prevents rapid-loop on persistent errors.
   let restartDelay = IS_MOBILE ? 600 : 0;
+  // Consecutive 'network' errors — a run of them means the browser's speech
+  // backend is unusable, not that the link hiccuped (see onerror).
+  let networkErrors = 0;
 
   recognition.onresult = async (e) => {
     restartDelay = IS_MOBILE ? 600 : 0; // reset backoff on any successful result
+    networkErrors = 0;
 
     let interim = '';
     let finalChunk = '';
@@ -1079,9 +1390,17 @@ function initSpeechRecognition() {
       showSystemMsg('ใช้ไมโครโฟนไม่ได้ — อาจถูกใช้งานโดยแอปอื่นอยู่');
       disableSpeech();
     } else if (e.error === 'network') {
+      // Ubuntu's Chromium (snap/apt) ships without the Google API keys its
+      // speech service needs, so EVERY session dies here while the UI keeps
+      // showing "listening" — the failure mode that hides itself. Two strikes
+      // tells a permanently broken build apart from a transient blip.
+      if (++networkErrors >= 2 && fallbackToWhisper(
+        'บริการรู้จำเสียงของเบราว์เซอร์นี้ใช้งานไม่ได้ — สลับไปใช้ Whisper ให้อัตโนมัติแล้ว'
+      )) return;
       // Back off faster on network errors to avoid hammering the service
       restartDelay = Math.min(Math.max(restartDelay, 500) * 2, 8000);
       console.warn('[STT] network error — next restart in', restartDelay, 'ms');
+      if (networkErrors === 1) showSystemMsg('การรู้จำเสียงมีปัญหาการเชื่อมต่อ — กำลังลองใหม่…');
     }
   };
 
@@ -1344,6 +1663,7 @@ function toggleSpeech() {
 //  TTS (AI → voice)
 // ════════════════════════════════════════════════
 function speak(text) {
+  if (!state.speakerOn) return;
   if (!settings.ttsEnabled || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(stripJsonBlocks(text));
@@ -1383,10 +1703,20 @@ function getThaiVoice() {
 
 // Called when an incoming peer message arrives — speak it if the peer has
 // enabled voicing for their messages (peerTTSEnabled), not our own toggle.
+// When the TTS path is unavailable (peer-TTS off / speaker muted / no
+// speechSynthesis), fall back to the screen-reader live region: since
+// #chat-messages dropped aria-live, this is the only way a blind operator
+// learns a typed message arrived at all. Silent for sighted users, and never
+// doubles up with TTS — exactly one of the two paths runs.
 function speakPeerMessage(text) {
-  if (!peerTTSEnabled || !window.speechSynthesis) return;
+  const clean = stripJsonBlocks(text);
+  if (!clean) return;
+  if (!state.speakerOn || !peerTTSEnabled || !window.speechSynthesis) {
+    announceAccessibility(`ข้อความ: ${clean}`);
+    return;
+  }
   window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(stripJsonBlocks(text));
+  const utt = new SpeechSynthesisUtterance(clean);
   const thai = getThaiVoice();
   if (thai) utt.voice = thai;
   utt.rate = 1.0;
@@ -1395,6 +1725,12 @@ function speakPeerMessage(text) {
 
 // On-demand speaker button on each message bubble (this IS a user gesture → unlocks TTS on iOS)
 function speakOnDemand(text) {
+  if (!state.speakerOn) {
+    // Explain the no-op: the master speaker switch gates all TTS, and a blind
+    // user can't see the muted speaker button state from here.
+    announceAccessibility('ลำโพงปิดอยู่ — เปิดลำโพงเพื่อฟังข้อความ');
+    return;
+  }
   if (!window.speechSynthesis) return;
   unlockTTS();
   window.speechSynthesis.cancel();
@@ -1412,8 +1748,8 @@ function updatePeerTTSStatus() {
     btn.classList.toggle('active-speech', myTTSEnabled);
     btn.setAttribute('aria-pressed', String(myTTSEnabled));
     btn.title = myTTSEnabled
-      ? 'Voicing my messages ON — peer will hear what I type'
-      : 'Voice my messages to peer';
+      ? 'เสียงถึงลูกค้าเปิดอยู่ — อีกฝ่ายได้ยินข้อความที่เราพิมพ์'
+      : 'ส่งเสียงข้อความของฉันให้อีกฝ่าย';
   }
   if (statusEl) statusEl.textContent = myTTSEnabled ? 'เสียงถึงลูกค้า: เปิด' : 'เสียงถึงลูกค้า: ปิด';
 }
@@ -1443,6 +1779,9 @@ function appendMessage(sender, text, side, interim = false) {
   clearWelcome();
   const wrap = document.createElement('div');
   wrap.className = `msg ${side}${interim ? ' interim' : ''}`;
+  // Interim STT text mutates every few hundred ms — hide it from screen
+  // readers so TalkBack doesn't read half-formed speech fragments non-stop.
+  if (interim) wrap.setAttribute('aria-hidden', 'true');
 
   const senderEl = document.createElement('div');
   senderEl.className = 'msg-sender';
@@ -1496,22 +1835,47 @@ function showTypingIndicator() {
 }
 function removeTypingIndicator() { const el = $('typing-indicator'); if (el) el.remove(); }
 
-function announceAccessibility(text) {
-  if (!window.speechSynthesis) return;
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'th-TH';
-  u.volume = 1;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(u);
+// Accessibility announcements go through the hidden #sr-status live region so
+// the user's OWN assistive tech (TalkBack / Narrator / NVDA) does the talking.
+// Never speak a11y feedback through speechSynthesis — it talks over the screen
+// reader. speechSynthesis stays product-only: reading chat messages aloud and
+// voicing the operator's messages to the customer.
+// Not gated by the speaker button: screen-reader speech is the user's channel,
+// independent of the page's audio output.
+// assertive=true → #sr-status-assertive: speaks through whatever the screen
+// reader is currently saying. Reserved for feedback that happens mid-gesture
+// (e.g. "ควบคุมได้แล้ว"), where a polite message may be delayed and dropped.
+const srSetTimers = {}, srClearTimers = {};
+function announceAccessibility(text, assertive = false) {
+  const id = assertive ? 'sr-status-assertive' : 'sr-status';
+  const el = $(id);
+  if (!el) return;
+  // Cancel BOTH pending timers: a stale 30 ms setter from a rapid previous
+  // call would otherwise briefly re-surface the old text after our clear.
+  clearTimeout(srSetTimers[id]);
+  clearTimeout(srClearTimers[id]);
+  // Clear first so announcing the same text twice still mutates the region
+  // (screen readers only speak on change).
+  el.textContent = '';
+  srSetTimers[id] = setTimeout(() => { el.textContent = text; }, 30);
+  // Wipe later so swipe-explore doesn't stumble onto stale status text.
+  srClearTimers[id] = setTimeout(() => { el.textContent = ''; }, 5000);
 }
 
-function showSystemMsg(text) {
+function showSystemMsg(text, { announce = true } = {}) {
   clearWelcome();
   const el = document.createElement('div');
   el.className = 'system-msg';
   el.textContent = text;
   chatMessages.appendChild(el);
   chatMessages.scrollTop = chatMessages.scrollHeight;
+  // System messages carry the app's only error reporting (camera/mic denied,
+  // ICE failed, connect_error, STT/AI errors, call ended) — a blind operator
+  // must hear them, not just see them. Every call site is a one-shot event,
+  // so mirroring to the live region can't flood the screen reader.
+  // Call sites that already speak their own (shorter) announcement pass
+  // announce:false. (Debug timing logs go through showTimingLog — silent.)
+  if (announce) announceAccessibility(text);
 }
 
 function showTimingLog(parts) {
@@ -1674,8 +2038,8 @@ function initSocket() {
   });
 
   socket.on('peer-joined', (peerId) => {
-    showSystemMsg('คู่สนทนาเข้าร่วมแล้ว — กำลังเชื่อมต่อ…');
-    announceAccessibility('คู่สนทนาเข้าร่วมแล้ว');
+    showSystemMsg('คู่สนทนาเข้าร่วมแล้ว — กำลังเชื่อมต่อ…', { announce: false });
+    announceAccessibility('อีกฝ่ายเข้ามาแล้ว'); // deliberately shorter than the visual msg
     startCall(peerId, false);
   });
 
@@ -1703,8 +2067,8 @@ function initSocket() {
     cleanupPeer(peerId);
     peerTTSEnabled = false; // reset when peer leaves; new peer starts fresh
     setRoomStatus('คู่สนทนาตัดการเชื่อมต่อ — กำลังรอ…', false);
-    showSystemMsg('คู่สนทนาออกจากห้องแล้ว');
-    announceAccessibility('คู่สนทนาออกจากห้องแล้ว');
+    showSystemMsg('คู่สนทนาออกจากห้องแล้ว', { announce: false });
+    announceAccessibility('อีกฝ่ายออกแล้ว'); // deliberately shorter than the visual msg
     setFaceWaitingVisible(true);
   });
 
@@ -1761,7 +2125,7 @@ function createPeerConnection(peerId) {
     aiAvatar.style.display = 'none';
     remoteName.textContent = 'คู่สนทนา';
     setRoomStatus('เชื่อมต่อแล้ว ●', true);
-    announceAccessibility('เชื่อมต่อแล้ว พร้อมพูดคุย');
+    announceAccessibility('ต่อติดแล้ว คุยได้เลย');
     setFaceWaitingVisible(false);
   };
 
@@ -1855,7 +2219,7 @@ function generateRoomCode() {
   setRoomStatus('กำลังรอให้อีกฝ่ายเข้าร่วม…', false);
   aiAvatar.style.display = 'none';
   remoteName.textContent = 'กำลังรอคู่สนทนา…';
-  announceAccessibility(`รหัสห้องของคุณคือ ${code.split('').join(' ')}`);
+  announceAccessibility(`รหัสห้อง ${code.split('').join(' ')}`);
 }
 
 function joinRoom(code) {
@@ -1895,6 +2259,7 @@ function endCall() {
 //  SETTINGS MODAL
 // ════════════════════════════════════════════════
 function populateSettingsForm() {
+  $('s-theme').value = settings.theme === 'dark' ? 'dark' : 'light';
   $('s-show-ai-mode').checked = !!settings.showAiMode;
   $('s-show-detect-btn').checked = !!settings.showDetectButton;
   $('s-show-timing-log').checked = !!settings.showTimingLog;
@@ -1919,6 +2284,7 @@ function populateSettingsForm() {
 
 function readSettingsForm() {
   return {
+    theme:            $('s-theme').value,
     showAiMode:       $('s-show-ai-mode').checked,
     showDetectButton: $('s-show-detect-btn').checked,
     showTimingLog:    $('s-show-timing-log').checked,
@@ -1951,7 +2317,7 @@ function toggleBaseUrlField(provider) {
     keyField.placeholder = 'sk-…';
     keyField.style.opacity = '';
     keyField.type = 'password';
-    $('toggle-key-btn').textContent = 'Show';
+    $('toggle-key-btn').textContent = 'แสดง';
   }
 
   const modelSelect = $('s-model-select');
@@ -2030,6 +2396,7 @@ function bindEventListeners() {
   );
 
   micBtn.addEventListener('click', toggleMic);
+  speakerBtn.addEventListener('click', toggleSpeaker);
   videoBtn.addEventListener('click', toggleCam);
   // 90°/270° rotation sizes the video from the wrap's dimensions — track resizes
   window.addEventListener('resize', applyRemoteRotation);
@@ -2067,7 +2434,12 @@ function bindEventListeners() {
   copyCodeBtn.addEventListener('click', () => {
     navigator.clipboard.writeText(roomCodeDisplay.textContent).then(() => {
       copyCodeBtn.textContent = 'คัดลอกแล้ว!';
+      announceAccessibility('คัดลอกรหัสแล้ว');
       setTimeout(() => (copyCodeBtn.textContent = 'คัดลอก'), 1500);
+    }).catch(() => {
+      // Clipboard can be blocked (permissions / non-secure context) — say so
+      // instead of failing silently. showSystemMsg announces it too.
+      showSystemMsg(`คัดลอกอัตโนมัติไม่สำเร็จ — รหัสห้องคือ ${roomCodeDisplay.textContent}`);
     });
   });
 
@@ -2084,6 +2456,7 @@ function bindEventListeners() {
   $('settings-save-btn').addEventListener('click', () => {
     settings = readSettingsForm();
     persistSettings(settings);
+    applyTheme();
     closeSettingsModal();
     showSystemMsg('บันทึกการตั้งค่าแล้ว');
     applyAiModeVisibility();
@@ -2103,8 +2476,8 @@ function bindEventListeners() {
   $('toggle-key-btn').addEventListener('click', () => {
     const inp = $('s-apikey');
     const btn = $('toggle-key-btn');
-    if (inp.type === 'password') { inp.type = 'text'; btn.textContent = 'Hide'; }
-    else { inp.type = 'password'; btn.textContent = 'Show'; }
+    if (inp.type === 'password') { inp.type = 'text'; btn.textContent = 'ซ่อน'; }
+    else { inp.type = 'password'; btn.textContent = 'แสดง'; }
   });
 }
 

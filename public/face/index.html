@@ -30,7 +30,10 @@
   <script src="/robot-viewer.js"></script>
   <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
   <script>
-    const BROKER = 'wss://test.mosquitto.org:8081';
+    // Local Mosquitto via the server's /ws/mqtt proxy — same origin as this
+    // page, so it follows whatever host/protocol served it (localhost or the
+    // Cloudflare tunnel URL). Must stay in sync with app.js DEFAULT_SETTINGS.
+    const BROKER = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/mqtt';
     const TOPIC  = 'robot/control';
 
     const canvas  = document.getElementById('face-canvas');
@@ -41,8 +44,8 @@
 
     function applyMsg(data) {
       if (!rv) return;
-      var headAngle = (data.Head  != null ? data.Head  : 65) - 65;
-      var mouthOpen = ((data.Mouth != null ? data.Mouth : 20) - 20) / 130;
+      var headAngle = (data.Head  != null ? data.Head  : 45) - 45;
+      var mouthOpen = ((data.Mouth != null ? data.Mouth : 30) - 30) / 70;
       var ax = data.Analog ? (data.Analog.x || 0) : 0;
       var ay = data.Analog ? (data.Analog.y || 0) : 0;
       rv.setJoint('i01.head.rothead_link_joint',     headAngle * Math.PI / 180);

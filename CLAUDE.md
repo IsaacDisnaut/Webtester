@@ -310,7 +310,7 @@ Drives the Three.js URDF viewer joints:
 #### `applyRobotPayload(str)`
 Parses a JSON string. If it has `Head`, `Mouth`, or `Analog` keys, updates `robotState` and calls `updateRobotModel()`. Returns `true` on success. Used by both MQTT and WebRTC data channel to avoid treating robot commands as chat messages.
 
-Mapping (canonical wire format, mode-independent): `Head` 0-80 → `headAngle = Head - 40`. `Mouth` 30-100 → `mouthOpen = (Mouth - 30) / 70`. `Analog.x/y` → direct (clamped -1..1).
+Mapping (canonical wire format, mode-independent): `Head` 0-90 → `headAngle = Head - 45`. `Mouth` 30-100 → `mouthOpen = (Mouth - 30) / 70`. `Analog.x/y` → direct (clamped -1..1).
 
 #### `playEmotionSequence(str)`
 Accepts JSON array or single object. Plays frames sequentially with 800 ms `setTimeout` between them. Cancels any in-progress sequence first.
@@ -319,7 +319,7 @@ Accepts JSON array or single object. Plays frames sequentially with 800 ms `setT
 Reads `settings.mqttUrl` and `settings.mqttTopic`. Connects `mqtt.js` browser client (WSS). Subscribes to `robot/control` (joystick/d-pad) and `robot/emotion` (AI face sequences). Dispatches messages: `robot/emotion` → `playEmotionSequence`, others → `applyRobotPayload`. Updates `#mqtt-dot` and `#mqtt-status-text`.
 
 #### `publishRobotState()`
-Converts `robotState` back to `{Head, Mouth, Analog}` wire format (Head = `65 + headAngle`, Mouth = `20 + mouthOpen*130`). Sends via WebRTC data channel (`sendToPeer`) and publishes to `robot/emotion` MQTT topic.
+Converts `robotState` back to `{Head, Mouth, Analog}` wire format (Head = `45 + headAngle`, Mouth = `30 + mouthOpen*70`). Sends via WebRTC data channel (`sendToPeer`) and publishes to `robot/emotion` MQTT topic.
 
 #### `initJoystick()`
 Pointer/touch event handlers on `#joystick-base`. Clamps displacement to 35% of base radius. Maps x/y offset to `robotState.analogX/Y` (range -1..1), calls `publishRobotState()`. On release: resets to 0,0.
@@ -565,7 +565,7 @@ Sets `chatInput` height to `scrollHeight` capped at 120 px.
 
 | Field | Range | Meaning |
 |---|---|---|
-| `Head` | 0–80 (center 40) | Servo degrees for head rotation (0 = left, 80 = right) |
+| `Head` | 0–90 (center 45) | Servo degrees for head rotation (0 = left, 90 = right) |
 | `Mouth` | 30–100 | Jaw servo (30 = closed, 100 = open/smile) |
 | `Analog.x` | -1..1 | Eye pan (left/right) |
 | `Analog.y` | -1..1 | Eye tilt (up/down) |
@@ -584,4 +584,4 @@ npm install
 node server.js
 ```
 
-Create `apikey` file one level up (`d:/CODING/DeepdarkFamtasy/apikey`) with provider keys. Visit `https://localhost:3443` — accept the self-signed cert.
+Create `apikey` file one level up (`d:/CODING/For4Aug/apikey`) with provider keys. Visit `https://localhost:3443` — accept the self-signed cert.

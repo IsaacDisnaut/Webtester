@@ -6,7 +6,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #060a10;
+  background: var(--login-bg);
   transition: opacity .45s ease, transform .45s ease;
 }
 .login-screen.exit {
@@ -36,7 +36,7 @@
 .login-card {
   position: relative;
   z-index: 1;
-  background: rgba(17, 24, 39, .85);
+  background: var(--login-card-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(108, 99, 255, .25);
@@ -45,7 +45,7 @@
   width: 400px;
   max-width: 94vw;
   text-align: center;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255,255,255,.04) inset;
+  box-shadow: var(--login-card-shadow);
   animation: card-rise .55s cubic-bezier(.22,1,.36,1);
 }
 @keyframes card-rise {
@@ -101,12 +101,12 @@
   font-size: 1.65rem;
   font-weight: 700;
   letter-spacing: -.5px;
-  color: #fff;
+  color: var(--login-title);
   margin-bottom: 8px;
 }
 .login-sub {
   font-size: .875rem;
-  color: #64748b;
+  color: var(--text-muted);
   margin-bottom: 32px;
   line-height: 1.5;
 }
@@ -117,15 +117,15 @@
 .login-label {
   font-size: .8rem;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: .6px;
 }
 .login-input {
-  background: rgba(255,255,255,.05);
-  border: 1px solid rgba(255,255,255,.1);
+  background: var(--login-input-bg);
+  border: 1px solid var(--login-input-border);
   border-radius: 12px;
-  color: #e2e8f0;
+  color: var(--login-input-color);
   padding: 13px 16px;
   font-size: 1rem;
   font-family: inherit;
@@ -133,7 +133,7 @@
   transition: border-color .2s, box-shadow .2s;
   width: 100%;
 }
-.login-input::placeholder { color: #475569; }
+.login-input::placeholder { color: var(--login-input-placeholder); }
 .login-input:focus {
   border-color: rgba(108,99,255,.7);
   box-shadow: 0 0 0 3px rgba(108,99,255,.15);
@@ -141,7 +141,7 @@
 .login-input.error { border-color: rgba(239,68,68,.6); }
 .login-error {
   font-size: .78rem;
-  color: #f87171;
+  color: var(--danger);
   min-height: 16px;
   padding-left: 4px;
 }
@@ -179,7 +179,7 @@
   border-radius: 20px;
   padding: 4px 12px;
   font-size: .78rem;
-  color: #94a3b8;
+  color: var(--text-dim);
   margin-left: auto;
   margin-right: 8px;
 }
@@ -189,12 +189,64 @@
 #session-timer { font-variant-numeric: tabular-nums; color: var(--primary); font-weight: 600; }
 
 /* ── CSS Variables ───────────────────────────────────────── */
+/* Light theme is the default (:root). Dark theme is applied by setting
+   data-theme="dark" on <html> — done by an inline <head> script before
+   first paint, and by applyTheme() in app.js when Settings change. */
 :root {
+  --bg: #f1f5f9;
+  --surface: #ffffff;
+  --card: #eef2f7;
+  --border: #d7dfe9;
+  /* Darker than the brand #6c63ff: --primary doubles as a TEXT color (room
+     code, AI label, timers) and #6c63ff is only ~4.3:1 on white — below
+     WCAG AA. #574fd6 reads ~6:1 on white and white-on-it passes too. */
+  --primary: #574fd6;
+  --primary-hover: #463dc0;
+  --primary-glow: rgba(108, 99, 255, 0.25);
+  --success: #16a34a;
+  --danger: #ef4444;
+  --danger-glow: rgba(239, 68, 68, 0.3);
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --text-dim: #475569;
+  --you-bubble: #dbeafe;
+  --ai-bubble: #e8edf4;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 4px 24px rgba(15,23,42,.14);
+  /* Surfaces that were hardcoded dark before theming */
+  --video-col-bg: #e2e8f0;
+  --remote-bg: #cbd5e1;
+  --controls-fade: rgba(241,245,249,.94);
+  --hover-bg: rgba(0,0,0,.05);
+  --overlay-bg: rgba(15,23,42,.45);
+  --robot-face-grad-in: #e2e8f0;
+  --robot-face-grad-out: #f8fafc;
+  --joystick-bg: rgba(0,0,0,.05);
+  --pad-btn-bg: rgba(0,0,0,.06);
+  --pad-btn-border: rgba(0,0,0,.14);
+  --pad-btn-color: #1e293b;
+  --pad-center-bg: rgba(0,0,0,.04);
+  --pad-center-border: rgba(0,0,0,.1);
+  --pad-center-color: rgba(0,0,0,.45);
+  /* Login screen */
+  --login-bg: #eef2f7;
+  --login-card-bg: rgba(255,255,255,.88);
+  --login-card-shadow: 0 24px 64px rgba(15,23,42,.18), 0 0 0 1px rgba(15,23,42,.04) inset;
+  --login-title: #1e293b;
+  --login-input-bg: rgba(0,0,0,.04);
+  --login-input-border: rgba(0,0,0,.12);
+  --login-input-color: #1e293b;
+  --login-input-placeholder: #94a3b8;
+}
+
+[data-theme="dark"] {
   --bg: #080c14;
   --surface: #111827;
   --card: #1a2235;
   --border: #1f2d44;
   --primary: #6c63ff;
+  --primary-hover: #574fd6;
   --primary-glow: rgba(108, 99, 255, 0.35);
   --success: #22c55e;
   --danger: #ef4444;
@@ -204,9 +256,29 @@
   --text-dim: #94a3b8;
   --you-bubble: #1e3a5f;
   --ai-bubble: #1e2d40;
-  --radius: 12px;
-  --radius-sm: 8px;
   --shadow: 0 4px 24px rgba(0,0,0,.5);
+  --video-col-bg: #050810;
+  --remote-bg: #02040a;
+  --controls-fade: rgba(2,4,10,.95);
+  --hover-bg: rgba(255,255,255,.06);
+  --overlay-bg: rgba(0,0,0,.7);
+  --robot-face-grad-in: #1a2235;
+  --robot-face-grad-out: #0d1117;
+  --joystick-bg: rgba(255,255,255,.06);
+  --pad-btn-bg: rgba(255,255,255,.08);
+  --pad-btn-border: rgba(255,255,255,.14);
+  --pad-btn-color: #e2e8f0;
+  --pad-center-bg: rgba(255,255,255,.04);
+  --pad-center-border: rgba(255,255,255,.06);
+  --pad-center-color: rgba(255,255,255,.35);
+  --login-bg: #060a10;
+  --login-card-bg: rgba(17, 24, 39, .85);
+  --login-card-shadow: 0 24px 64px rgba(0, 0, 0, .6), 0 0 0 1px rgba(255,255,255,.04) inset;
+  --login-title: #fff;
+  --login-input-bg: rgba(255,255,255,.05);
+  --login-input-border: rgba(255,255,255,.1);
+  --login-input-color: #e2e8f0;
+  --login-input-placeholder: #475569;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -326,7 +398,7 @@ body {
   transition: all .18s;
   white-space: nowrap;
 }
-.mode-btn:hover { color: var(--text); background: rgba(255,255,255,.06); }
+.mode-btn:hover { color: var(--text); background: var(--hover-bg); }
 .mode-btn.active { background: var(--primary); color: #fff; }
 
 .icon-btn {
@@ -360,7 +432,7 @@ body {
 .video-col {
   display: flex;
   flex-direction: column;
-  background: #050810;
+  background: var(--video-col-bg);
   position: relative;
   min-height: 0;
 }
@@ -426,7 +498,7 @@ body {
   justify-content: center;
   min-height: 0;
   overflow: hidden;
-  background: #02040a;
+  background: var(--remote-bg);
 }
 
 #remote-video {
@@ -494,6 +566,7 @@ body {
   bottom: 14px;
   left: 14px;
   background: rgba(0,0,0,.65);
+  color: #fff;   /* always over a dark video overlay — must not inherit --text (dark in light theme) */
   padding: 4px 10px;
   border-radius: 6px;
   font-size: .8rem;
@@ -561,7 +634,10 @@ body {
   bottom: 4px;
   left: 6px;
   font-size: .75rem;
-  color: rgba(255,255,255,.7);
+  color: rgba(255,255,255,.85);
+  background: rgba(0,0,0,.45);
+  padding: 1px 6px;
+  border-radius: 4px;
   pointer-events: none;
 }
 
@@ -576,7 +652,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: linear-gradient(to top, rgba(2,4,10,.95) 80%, transparent);
+  background: linear-gradient(to top, var(--controls-fade) 80%, transparent);
   padding: 0 16px;
 }
 
@@ -819,7 +895,7 @@ body {
   flex-shrink: 0;
   transition: all .18s;
 }
-.send-btn:hover { background: #574fd6; transform: scale(1.05); }
+.send-btn:hover { background: var(--primary-hover); transform: scale(1.05); }
 .send-btn:disabled { background: var(--border); cursor: not-allowed; transform: none; }
 
 /* ── Buttons (shared) ────────────────────────────────────── */
@@ -836,7 +912,7 @@ body {
 }
 .btn:hover { border-color: var(--text-muted); }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
-.btn.primary:hover { background: #574fd6; }
+.btn.primary:hover { background: var(--primary-hover); }
 
 .btn-sm {
   padding: 4px 12px;
@@ -856,7 +932,7 @@ body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.7);
+  background: var(--overlay-bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1052,8 +1128,8 @@ body {
   min-height: 0;
   border-radius: 10px;
   overflow: hidden;
-  background: radial-gradient(ellipse at 50% 40%, #1a2235 0%, #0d1117 100%);
-  box-shadow: 0 4px 24px rgba(0,0,0,.6);
+  background: radial-gradient(ellipse at 50% 40%, var(--robot-face-grad-in) 0%, var(--robot-face-grad-out) 100%);
+  box-shadow: var(--shadow);
 }
 #robot-canvas {
   display: block;
@@ -1113,6 +1189,18 @@ body.face-mode .face-waiting-status.visible {
   align-items: center;
   gap: 6px;
 }
+/* Visually hidden but still reachable by screen readers (TalkBack swipe/focus) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 .robot-ctrl-label {
   font-size: .75rem;
   color: var(--text-muted);
@@ -1126,7 +1214,7 @@ body.face-mode .face-waiting-status.visible {
   width: 108px;
   height: 108px;
   border-radius: 50%;
-  background: rgba(255,255,255,.06);
+  background: var(--joystick-bg);
   border: 2px solid rgba(108,99,255,.35);
   display: flex;
   align-items: center;
@@ -1149,6 +1237,19 @@ body.face-mode .face-waiting-status.visible {
   pointer-events: none;
 }
 .joystick-thumb.active { box-shadow: 0 0 0 8px rgba(108,99,255,.2), 0 2px 12px rgba(108,99,255,.6); }
+/* One invisible slider covering the whole joystick — a TalkBack tap anywhere
+   on the circle lands on the same control; pointer events bubble to the base
+   so mouse/touch dragging is unaffected. */
+.joystick-stick {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 50%;
+}
+.joystick-stick:focus { outline: none; } /* TalkBack draws its own focus frame */
+.joystick-stick:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 
 /* D-pad */
 .dpad {
@@ -1166,9 +1267,9 @@ body.face-mode .face-waiting-status.visible {
   width: 36px;
   height: 36px;
   border-radius: 4px;
-  background: rgba(255,255,255,.04);
-  border: 1px solid rgba(255,255,255,.06);
-  color: rgba(255,255,255,.35);
+  background: var(--pad-center-bg);
+  border: 1px solid var(--pad-center-border);
+  color: var(--pad-center-color);
   font-size: .85rem;
   cursor: pointer;
   display: flex;
@@ -1185,9 +1286,9 @@ body.face-mode .face-waiting-status.visible {
   width: 42px;
   height: 42px;
   border-radius: 8px;
-  background: rgba(255,255,255,.08);
-  border: 1.5px solid rgba(255,255,255,.14);
-  color: var(--text-primary, #e2e8f0);
+  background: var(--pad-btn-bg);
+  border: 1.5px solid var(--pad-btn-border);
+  color: var(--pad-btn-color);
   font-size: 1.1rem;
   display: flex;
   align-items: center;
