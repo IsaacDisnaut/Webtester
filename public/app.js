@@ -1499,7 +1499,20 @@ const MIN_RECORD_MS     = 500;   // don't auto-stop before this many ms
 async function startWhisperRecording() {
   if (whisperRecorder) return; // already recording
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    // Reuse the call's mic instead of opening it a second time: on PCs with
+    // exclusive-mode mics (and on Android) a second getUserMedia gets a silent
+    // track while WebRTC holds the device. A clone shares the same source, has
+    // its own `enabled` flag (so STT works even with the call mic muted), and
+    // stopping it in onstop leaves the call's track running.
+    const liveTrack = state.localStream?.getAudioTracks().find(t => t.readyState === 'live');
+    let stream;
+    if (liveTrack) {
+      const clone = liveTrack.clone();
+      clone.enabled = true;
+      stream = new MediaStream([clone]);
+    } else {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    }
     const tracks = stream.getAudioTracks();
     console.log('[Whisper] mic tracks:', tracks.map(t => `${t.label} enabled=${t.enabled} muted=${t.muted}`));
 
@@ -1526,7 +1539,15 @@ async function startWhisperRecording() {
       console.log('[Whisper] blob size:', blob.size, 'type:', blob.type);
       if (blob.size < 1000) {
         console.warn('[Whisper] blob too small — microphone may not have captured audio');
-        showSystemMsg('ไม่มีเสียงถูกบันทึก — กรุณาตรวจสอบสิทธิ์การใช้ไมโครโฟน');
+        // Permission is already granted by this point (denial throws into the
+        // catch below), so the mic is delivering no audio at all. Drop out of
+        // continuous mode — otherwise the button stays "listening" with no
+        // recorder running.
+        whisperContinuous = false;
+        speechBtn.classList.remove('active-speech');
+        speechBtn.setAttribute('aria-pressed', 'false');
+        speechIndicator.style.display = 'none';
+        showSystemMsg('ไม่มีเสียงจากไมโครโฟน — ไมค์อาจถูกโปรแกรมอื่นใช้อยู่ หรือถูกปิดเสียงในระบบ');
         return;
       }
       await transcribeWhisper(blob);
