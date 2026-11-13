@@ -33,7 +33,7 @@ if not exist "%~dp0videocall\server.js" (
         echo [ERROR] git not found. Install: winget install Git.Git
         pause & exit /b 1
     )
-    git -C "%~dp0." submodule update --init --recursive
+    git -C "%~dp0." submodule update --init
     if not exist "%~dp0videocall\server.js" (
         echo [ERROR] Could not fetch videocall\. Clone with git, not "Download ZIP":
         echo         git clone --recurse-submodules https://github.com/IsaacDisnaut/Webtester.git
