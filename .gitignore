@@ -8,3 +8,16 @@ videocall.db-wal
 apikey
 tempCodeRunnerFile.py
 __pycache__/
+
+# docs stay local — only README is published
+*.md
+!README.md
+
+# keys / secrets
+*.pem
+*.key
+*.p12
+*.pfx
+.env.*
+*secret*
+*credentials*
