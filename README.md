@@ -7,32 +7,58 @@
 
 ## ติดตั้งบนเครื่องใหม่ (Windows)
 
-### 1. Clone พร้อม submodule
+### 1. ติดตั้งโปรแกรมผ่าน terminal
+
+เปิด terminal **แบบ Admin**: กด `Win + X` → เลือก **Terminal (Admin)** (หรือ Windows PowerShell (Admin)) แล้ววางทีละบรรทัด:
+
+```
+winget install -e --id Git.Git
+winget install -e --id OpenJS.NodeJS.LTS
+winget install -e --id Cloudflare.cloudflared
+winget install -e --id Python.Python.3.12
+winget install -e --id EclipseFoundation.Mosquitto
+```
+
+| โปรแกรม | ใช้ทำอะไร |
+|---|---|
+| Git | clone / pull โค้ด (จำเป็น) |
+| Node.js LTS | web server (จำเป็น) |
+| cloudflared | URL สาธารณะ HTTPS (จำเป็น) |
+| Python 3 | `deep.py` สะพาน MQTT → Arduino |
+| Mosquitto | MQTT ควบคุมหุ่น |
+
+ถ้าขึ้นถามยอมรับเงื่อนไข (`Do you agree to all the source agreements terms?`) พิมพ์ `Y` แล้ว Enter
+ถ้าขึ้น `'winget' is not recognized` — เปิด Microsoft Store ค้นหา **App Installer** กด Update/Install แล้วลองใหม่
+
+ติดตั้งเสร็จแล้ว **ปิด terminal แล้วเปิดใหม่** (ไม่งั้นจะยังหาคำสั่งไม่เจอ) แล้วเช็คว่าครบ:
+
+```
+git --version
+node --version
+cloudflared --version
+python --version
+```
+
+Mosquitto จะสร้าง Windows service ที่แย่งพอร์ต 1883 — ปิดครั้งเดียว (ใน terminal แบบ Admin):
+
+```
+net stop mosquitto
+sc config mosquitto start=disabled
+```
+
+ใช้ Node.js เวอร์ชัน **LTS** เท่านั้น — เวอร์ชันใหม่กว่านั้น `better-sqlite3` อาจไม่มีไฟล์สำเร็จรูปให้ และ `npm install` จะล้ม
+
+### 2. Clone พร้อม submodule
+
+ใน terminal ไปที่โฟลเดอร์ที่จะเก็บโปรเจค (เช่น `cd D:\`) แล้ว:
 
 ```
 git clone --recurse-submodules https://github.com/IsaacDisnaut/Webtester.git
+cd Webtester
 ```
 
 โฟลเดอร์ `videocall/` เป็น submodule — ถ้าลืม `--recurse-submodules` ไม่เป็นไร `start-local.bat` จะดึงให้เอง
 แต่ **อย่าใช้ "Download ZIP"** เพราะ ZIP ไม่มี submodule และดึงตามทีหลังไม่ได้
-
-### 2. ติดตั้งโปรแกรม
-
-| โปรแกรม | คำสั่ง | ใช้ทำอะไร |
-|---|---|---|
-| Node.js LTS | `winget install OpenJS.NodeJS.LTS` | web server (จำเป็น) |
-| cloudflared | `winget install Cloudflare.cloudflared` | URL สาธารณะ HTTPS (จำเป็น) |
-| Mosquitto | `winget install EclipseFoundation.Mosquitto` (รันแบบ Admin) | MQTT ควบคุมหุ่น |
-| Python 3 | `winget install Python.Python.3.12` | `deep.py` สะพาน MQTT → Arduino |
-
-ใช้ Node.js เวอร์ชัน **LTS** เท่านั้น — เวอร์ชันใหม่กว่านั้น `better-sqlite3` อาจไม่มีไฟล์สำเร็จรูปให้ และ `npm install` จะล้ม
-ติดตั้งเสร็จแล้วให้ **ปิดแล้วเปิด terminal ใหม่** ไม่งั้นจะยังหาคำสั่งไม่เจอ
-
-ถ้าติดตั้ง Mosquitto ผ่าน winget มันจะสร้าง Windows service ที่แย่งพอร์ต 1883 — ปิดครั้งเดียว (Admin):
-
-```
-net stop mosquitto && sc config mosquitto start=disabled
-```
 
 ### 3. Python packages
 
@@ -107,5 +133,5 @@ git submodule update --init
 | หน้าเว็บขึ้น **502 Bad Gateway** | web server ไม่ได้รัน — ดู error ในหน้าต่าง "VideoCall Server" |
 | `Failed to dial a quic connection` | เครือข่ายบล็อก UDP — script ใช้ `--protocol http2` อยู่แล้ว รอสักครู่จะต่อได้เอง |
 | หุ่นไม่ขยับ | ดูหน้าต่าง "Mosquitto MQTT" และ "Robot Bridge (deep.py)" ว่ามี error ไหม, เช็คพอร์ต COM |
-| `[WARN] Mosquitto Windows service is running` | ปิด service ตามข้อ 2 |
+| `[WARN] Mosquitto Windows service is running` | ปิด service ตามข้อ 1 |
 | STT ขึ้น "ไม่มีเสียงจากไมโครโฟน" | ไมค์ถูกโปรแกรมอื่นจับอยู่ — ปิด LINE/Discord/Zoom/Teams แล้วลองใหม่ |
