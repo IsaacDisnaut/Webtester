@@ -1383,6 +1383,9 @@ function initSpeechRecognition() {
 
   recognition.onerror = (e) => {
     console.warn('[STT] error:', e.error);
+    // Already turned off — disableSpeech stopping sttTrack can surface as a
+    // late 'audio-capture' that would otherwise show a false mic warning.
+    if (!state.speechOn) return;
     if (['not-allowed', 'service-not-allowed'].includes(e.error)) {
       showSystemMsg('ไม่ได้รับอนุญาตให้ใช้ไมโครโฟน กรุณาอนุญาตในการตั้งค่าเบราว์เซอร์');
       disableSpeech();
@@ -1409,7 +1412,7 @@ function initSpeechRecognition() {
     if (!state.speechOn) return;
     setTimeout(() => {
       if (!state.speechOn) return;
-      try { recognition.start(); console.log('[STT] restarted'); } catch (err) { console.warn('[STT] restart failed:', err); }
+      try { startRecognition(); console.log('[STT] restarted'); } catch (err) { console.warn('[STT] restart failed:', err); }
     }, restartDelay);
     // Increase delay after each failed session; start from 300 ms minimum so multiplication works
     restartDelay = restartDelay < 300 ? 300 : Math.min(restartDelay * 1.5, 8000);
@@ -1451,6 +1454,30 @@ async function resumeLocalAudioAfterSTT() {
   }
 }
 
+// Same fix as Whisper (see startWhisperRecording): some PCs give a silent
+// track to any second mic capture, so feed the recognizer a clone of the
+// call's mic. start(audioTrack) is Chrome 133+; older builds ignore the extra
+// argument and open the mic themselves as before. On mobile (non-/face) the
+// call track was already stopped by pauseLocalAudioForSTT, so there is
+// nothing to clone and the recognizer uses the mic directly.
+let sttTrack = null;
+
+function startRecognition() {
+  if (!sttTrack || sttTrack.readyState !== 'live') {
+    const liveTrack = state.localStream?.getAudioTracks().find(t => t.readyState === 'live');
+    sttTrack = liveTrack ? liveTrack.clone() : null;
+    if (sttTrack) sttTrack.enabled = true; // STT works even with the call mic muted
+  }
+  if (!sttTrack) { recognition.start(); return; }
+  try {
+    recognition.start(sttTrack);
+  } catch (err) {
+    if (err.name === 'InvalidStateError') throw err; // already running
+    console.warn('[STT] start(audioTrack) rejected — using the mic directly:', err);
+    recognition.start();
+  }
+}
+
 function enableSpeech() {
   if (!recognition) return;
   recognition.lang = 'th-TH';
@@ -1463,7 +1490,7 @@ function enableSpeech() {
   // that means SpeechRecognition can't grab the mic on Android (use Whisper
   // STT mode in Settings if the kiosk is Android and text is also needed).
   if (IS_MOBILE && !IS_FACE) pauseLocalAudioForSTT();
-  try { recognition.start(); } catch {}
+  try { startRecognition(); } catch {}
   speechBtn.classList.add('active-speech');
   speechBtn.setAttribute('aria-pressed', 'true');
   speechIndicator.style.display = 'flex';
@@ -1476,6 +1503,7 @@ function enableSpeech() {
 function disableSpeech() {
   state.speechOn = false;
   if (recognition) try { recognition.stop(); } catch {}
+  if (sttTrack) { sttTrack.stop(); sttTrack = null; }
   if (interimMsgEl) { interimMsgEl.remove(); interimMsgEl = null; }
   speechBtn.classList.remove('active-speech');
   speechBtn.setAttribute('aria-pressed', 'false');
