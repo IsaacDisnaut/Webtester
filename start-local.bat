@@ -108,19 +108,24 @@ if exist "%MOSQ_EXE%" (
 :: ── Start Node.js server in a new window ──
 echo [2/5] Starting Node.js server on port 3000...
 start "VideoCall Server" cmd /k "cd /d "%~dp0videocall" && set NODE_ENV=production&& set PORT=3000&& node server.js"
-:: Wait until it answers - opening the tunnel before that just shows visitors a 502
+:: Wait until it answers - opening the tunnel before that just shows visitors a 502.
+:: --noproxy: campus/office networks set HTTP(S)_PROXY, and curl would send even
+:: localhost through it and never reach the server. Only a warning on timeout:
+:: this probe can be wrong (old Windows without curl), the server window can't.
 set WAIT=0
 :wait_server
-curl -s -o nul http://localhost:3000/ && goto server_up
+curl -s -o nul --noproxy "*" http://127.0.0.1:3000/ && goto server_up
 set /a WAIT+=1
 if %WAIT% geq 30 (
-    echo [ERROR] Server did not start on port 3000 - read the error in the "VideoCall Server" window.
-    pause & exit /b 1
+    echo [WARN] No answer from port 3000 after 30s - if the "VideoCall Server" window
+    echo        shows an error, fix that first. Continuing anyway...
+    goto server_done
 )
 timeout /t 1 /nobreak >nul
 goto wait_server
 :server_up
 echo [INFO] Server is up.
+:server_done
 
 :: ── Start deep.py (MQTT -> Arduino serial bridge) ──
 echo [3/5] Starting deep.py robot bridge...
