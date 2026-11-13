@@ -68,6 +68,38 @@ Groq: gsk_xxxxxxxxxxxxxxxx
 
 URL เปลี่ยนใหม่ทุกครั้งที่รัน
 
+## อัปเดตโค้ดเวอร์ชันใหม่ (pull)
+
+เปิด terminal ที่โฟลเดอร์โปรเจค แล้วรัน **ทั้งสองบรรทัด**:
+
+```
+git pull
+git submodule update --init
+```
+
+`git pull` อย่างเดียวไม่พอ — มันอัปเดตแค่โปรเจคหลัก ส่วนโค้ดเว็บใน `videocall/` (submodule) จะยังเป็นเวอร์ชันเก่าจนกว่าจะรันบรรทัดที่สอง
+
+ถ้าไม่อยากพิมพ์สองบรรทัดทุกครั้ง ตั้งค่าครั้งเดียวต่อเครื่อง แล้วต่อไป `git pull` จะอัปเดต submodule ให้เอง:
+
+```
+git config submodule.recurse true
+```
+
+หลัง pull:
+
+1. ปิดหน้าต่างทั้งหมดที่ `start-local.bat` เปิดไว้ แล้วดับเบิลคลิก `start-local.bat` ใหม่ (ถ้า dependencies เปลี่ยน script จะ `npm install` ให้เอง)
+2. ในเบราว์เซอร์กด **Ctrl+F5** เพื่อโหลดหน้าเว็บใหม่ ไม่ใช้ไฟล์เก่าที่ cache ไว้
+
+ถ้า `git pull` ขึ้น `Your local changes ... would be overwritten` แปลว่าเคยแก้ไฟล์ในเครื่องนี้เอง — เก็บการแก้ไว้ก่อนแล้ว pull ใหม่:
+
+```
+git stash
+git pull
+git submodule update --init
+```
+
+(เรียกคืนการแก้ที่เก็บไว้ด้วย `git stash pop` ถ้าต้องการ)
+
 ## แก้ปัญหา
 
 | อาการ | สาเหตุ / วิธีแก้ |
