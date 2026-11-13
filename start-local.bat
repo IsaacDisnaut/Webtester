@@ -42,16 +42,23 @@ if not exist "%~dp0videocall\server.js" (
 )
 
 :: ── npm packages - check they actually load, not just that node_modules exists,
-::    so a half-finished install from an earlier failed run gets redone ──
+::    so a half-finished install from an earlier failed run gets redone.
+::    "new Database" matters: require() alone doesn't load better-sqlite3's native
+::    binary, so a build for another Node version (NODE_MODULE_VERSION mismatch
+::    after upgrading Node) would pass the check and crash the server instead ──
+set NODE_CHECK=new (require('better-sqlite3'))(':memory:');require('express');require('socket.io')
 pushd "%~dp0videocall"
-node -e "require('better-sqlite3');require('express');require('socket.io')" >nul 2>&1
+node -e "%NODE_CHECK%" >nul 2>&1
 if errorlevel 1 (
-    echo [INFO] Installing npm packages...
+    echo [INFO] Installing npm packages for this Node.js version...
     call npm install
-    node -e "require('better-sqlite3');require('express');require('socket.io')" >nul 2>&1
+    rem npm install skips packages that are already present, even when their native
+    rem binary was built for a different Node - rebuild fetches the matching one
+    call npm rebuild better-sqlite3
+    node -e "%NODE_CHECK%" >nul 2>&1
     if errorlevel 1 (
-        echo [ERROR] npm install failed. better-sqlite3 only ships prebuilt binaries for
-        echo         Node.js LTS versions - install one, then run this again:
+        echo [ERROR] npm packages still don't load. Delete the videocall\node_modules
+        echo         folder and run this again. If it still fails, install Node.js LTS:
         echo         winget install OpenJS.NodeJS.LTS
         popd & pause & exit /b 1
     )
